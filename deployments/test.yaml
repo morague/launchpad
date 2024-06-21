@@ -1,0 +1,12 @@
+name: test
+runner: WorkflowRunner
+workflow:
+  workflow: Task
+  workflow_id: cute_id
+  task_queue: default
+  workflow_kwargs:
+    activity: appfile
+    args: 
+      - ROMAIN
+    client_address: localhost:7233
+

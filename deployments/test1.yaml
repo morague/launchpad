@@ -1,0 +1,26 @@
+name: test1
+runner: ScheduledWorkflowRunner
+workflow:
+  workflow: Task
+  workflow_id: cute_id
+  task_queue: default
+  workflow_kwargs:
+    activity: appfile
+    args: 
+      - Scheduled_ROMAIN
+    client_address: localhost:7233
+schedule:
+  scheduler_id: cute_schedule_id
+  intervals:
+    - every:
+        seconds: 10
+      # offset:
+
+
+  # calendars:
+  # crons:
+  # skip:
+  # start_at:
+  # tz:
+  # trigger_immediately:
+
