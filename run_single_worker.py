@@ -1,5 +1,5 @@
-from launchpad.workers import WorkersControler
-from launchpad.temporal_server import TemporalServerControler
+from launchpad.workers import WorkersManager
+from launchpad.temporal_server import TemporalServerManager
 import asyncio
 from temporalio.client import Client, Schedule, ScheduleActionStartWorkflow, ScheduleSpec, ScheduleIntervalSpec
 from temporalio.worker import Worker
@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta
 import os
 
-from launchpad.workflows import Task1, Task
+from launchpad.workflows import Task
 from launchpad.activities import activities
 
 # server =TemporalServerControler.run()
@@ -36,7 +36,7 @@ async def main():
 async def run_workflow(callable, kwargs, id, task_queue, client):
     client = await Client.connect(client)
 
-    async with Worker(client,task_queue="default", activities= list(activities.values()), workflows=[Task, Task1]):
+    async with Worker(client,task_queue="default", activities= list(activities.values()), workflows=[Task]):
         result = await client.execute_workflow(callable, kwargs, id=id, task_queue=task_queue)
         print(f"Result: {result}")
 
@@ -74,14 +74,14 @@ async def run_delai_workflows():
 #     client="localhost:7233"
 # ))
 
-asyncio.run(run_interval_workflows(
-    callable=Task1.run,
-    kwargs={"activity":"appfile", "args":["ROMAIN"], "client":"localhost:7233"},
-    id="my-nasty-interval",
-    wid="my-cute-litle-workflow-id",
-    task_queue="default",
-    client="localhost:7233"
-))
+# asyncio.run(run_interval_workflows(
+#     callable=Task1.run,
+#     kwargs={"activity":"appfile", "args":["ROMAIN"], "client":"localhost:7233"},
+#     id="my-nasty-interval",
+#     wid="my-cute-litle-workflow-id",
+#     task_queue="default",
+#     client="localhost:7233"
+# ))
 
 
 

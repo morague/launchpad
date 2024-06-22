@@ -15,8 +15,8 @@
 # if __name__ == "__main__":
 #     asyncio.run(main())
 
-from launchpad.workflows import Task, Task1
+from launchpad.workflows import Task
 from launchpad.activities import activities
 
 from launchpad.workers import WorkersManager
-workers = WorkersManager.as_main({"task_queue":"default", "workflows": [Task1,Task], "activities": list(activities.values())}) #, "activities": ["hello", "blabla"]
+# workers = WorkersManager.as_main({"task_queue":"default", "workflows": [Task], "activities": list(activities.values())}) #, "activities": ["hello", "blabla"]

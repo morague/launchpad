@@ -4,14 +4,15 @@ from temporalio import activity
 
 import sys
 import glob
+import inspect
 from hashlib import sha256
 from collections import deque
 import importlib
 from pathlib import Path
 
+from typing import Callable
 
-from launchpad.utils import is_activity
-
+from launchpad.utils import is_activity, is_workflow, path_into_module
 
 def find_modules(*paths) -> list[str]:
     modules = []
@@ -83,9 +84,10 @@ class Module:
     
     
 
-class Importer(object):
+class Watcher(object):
     __roots: list[str] = ["./"]
     __modules: dict[str, Module]
+    _skip: list[str] = ["asgi.py"]
 
     @property
     def roots(self):
@@ -106,21 +108,65 @@ class Importer(object):
         self.__roots = list(set(self.__roots))
 
     @classmethod
-    def load(cls, *paths):
-        importer = cls(*paths)
+    def initialize(cls, *paths) -> Watcher:
+        watcher = cls(*paths)
+        watcher.visit()
+        return watcher
+
+    def visit(self) -> None:
+        files = []
+        [files.extend(self._explore_folder(p)) for p in self.roots]
+        for file in files:
+            self._register_file(file)
+        self._remove_stale_files(files)
         
+    def refresh(self) -> None:
+        for fp, mod in self.modules.items():
+            if mod.modified:
+                name = path_into_module(fp)
+                importlib.reload(name)
+                mod.changes_resolved()
+
+    def load_temporal_objects(self) -> dict[str, Callable]:
+        objects = {}
+        for name in self.pymodules().keys():
+            name = path_into_module(name)
+            module = importlib.import_module(name=name)
+            for k,v in module.__dict__.items():
+                if k.startswith("__"):
+                    continue
+                
+                # ref = objects.get(k, None)
+                # if ref is not None and (is_activity(v) or is_workflow(v)) and ref != v:
+                #     raise KeyError()
+                
+                if(is_activity(v) or is_workflow(v)):
+                    objects[k] = v
+        # sys.modules[inspect.stack()[1].filename].__dict__.update(objects)
+        return objects
+
+    def pymodules(self) -> dict[str, Module]:
+        return {k:v for k,v in self.modules.items() if k.endswith(".py")}
     
-    def find_pymodules(self, folder_path) -> list[str]:
-        pass
-    
-    def explore_folder(self, path) -> list[str]:
-        pyfiles = []
-        pyfiles.extend(glob.glob(f"{path}/[!_]*.py"))
-        for folder in glob.glob(f"{path}/[!_]*[!.*]"):
-            pyfiles.extend(self.explore_folder(folder))
-        return pyfiles
+    def _register_file(self, fp: str) -> None:
+        ref = self.modules.get(fp, None)
+        if Path(fp).name in self._skip:
+            return
+        elif ref is None:
+            self.__modules[fp] = Module(fp)
+        else:
+            self.modules[fp].watch()
             
-    def is_folder_path(path) -> bool:
-        pass
+    def _remove_stale_files(self, visited_files: list[str]) -> None:
+        removed = list(set(self.modules.keys()) - set(visited_files))
+        [self.__modules.pop(fp) for fp in removed]
+    
+    def _explore_folder(self, path) -> list[str]:
+        py = glob.glob(f"{path}/**/[!_]*.py", recursive=True)
+        yaml = glob.glob(f"{path}/**/[!_]*.yaml", recursive=True)
+        yml = glob.glob(f"{path}/**/[!_]*.yml", recursive=True)
+        return py + yaml + yml
+    
+        
     
     
