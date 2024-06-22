@@ -9,6 +9,12 @@ from collections import defaultdict, ChainMap
 Payload = Dict[str, Any]
 
 
+def parse_yaml(fp: str) -> Payload:
+    with open(fp, "r") as f:
+        payload = yaml.load(f, SafeLoader)
+    payload = map_env(payload)
+    return payload
+
 def parse_config(config: Payload) -> Payload:
     env = os.environ.get("ENV", "development")
     main_config = config.get("app", None)
@@ -55,16 +61,16 @@ def parse_client_config(filename: str, *configs: Payload) -> None:
         writer.write(f"var config = {json.dumps(client_cfg)};")
 
 
-def map_env(config: Payload) -> Payload:
-    for k, v in config.items():
+def map_env(payload: Payload) -> Payload:
+    for k, v in payload.items():
         if isinstance(v, str) and v.startswith("${"):
             v = os.environ.get(v.split("{")[1].strip("}"), None)
             if v is None:
                 raise KeyError(f"ENV variable {k} does not exist")
-            config[k] = v
+            payload[k] = v
         elif isinstance(v, dict):
-            config[k] = map_env(v)
-    return config
+            payload[k] = map_env(v)
+    return payload
 
 
 def get_config(path: str) -> Payload:
