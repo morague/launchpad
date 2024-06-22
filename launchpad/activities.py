@@ -4,15 +4,22 @@ from temporalio import activity
 
 import sys
 import glob
-import inspect
+
+from datetime import datetime
 from hashlib import sha256
 from collections import deque
-import importlib
 from pathlib import Path
 
-from typing import Callable
+import importlib, importlib.util
+from importlib.machinery import SourceFileLoader
 
+from types import ModuleType
+from typing import Callable, Type
+
+from launchpad.parsers import parse_yaml
 from launchpad.utils import is_activity, is_workflow, path_into_module
+
+Datetime = str
 
 def find_modules(*paths) -> list[str]:
     modules = []
@@ -39,10 +46,10 @@ for module_path in modules_paths:
 
 
 class Module:
-    __module: str
+    __module: Path
     __latest: str
-    __historics: list[str]
-    modified: bool = False
+    __historics: list[tuple[Datetime, str]]
+    changes: bool = False
     
     @property
     def latest(self):
@@ -54,35 +61,68 @@ class Module:
     
     @property
     def module(self):
-        return self.__module    
-
+        return self.__module
+    
+    @property
+    def ftype(self):
+        return self.module.suffix.strip(".")
+    
     def __init__(self, module_fp: str) -> None:
-        self.__module = module_fp
+        self.__module = Path(module_fp)
         self.__historics = []
         self._update_latest(self.version())
     
     def __repr__(self) -> str:
-        return f"<{self.module}:latest {self.latest} | modified: {self.modified}>"
+        return f"<{self.module.as_posix()}:latest {self.latest} | changes: {self.changes}>"
         
     def version(self):
-        with open(self.module, 'r') as f:
+        with open(self.module.absolute(), 'r') as f:
             version = sha256(f.read().encode()).hexdigest()
         return version
             
     def watch(self):
         version = self.version()
         if version != self.latest:
-            self.modified = True
+            self.changes = True
             self._update_latest(version)
     
     def changes_resolved(self):
-        self.modified = False
+        self.changes = False
+
+    def same(self, other: Path) -> bool:
+        return self.module.samefile(other)
 
     def _update_latest(self, version: str) -> None:
         self.__latest = version
-        self.__historics.insert(0, version)
+        self.__historics.insert(0, ((datetime.now().isoformat(), version)))
+
+
+class YamlModule(Module):    
+    def __init__(self, module_fp: str) -> None:
+        super().__init__(module_fp)
     
+    def payload(self):
+        return parse_yaml(self.module.absolute())
     
+class PyModule(Module):    
+    def __init__(self, module_fp: str) -> None:
+        super().__init__(module_fp)
+        
+    @property
+    def module_name(self):
+        file = self.module.stem
+        path = str(self.module.relative_to("./")).split("/")[:-1]
+        return ".".join(path + [file])
+    
+    def load(self) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(
+            self.module_name, 
+            self.module.absolute()
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[self.module_name] = module
+        spec.loader.exec_module(module)
+        return module
 
 class Watcher(object):
     __roots: list[str] = ["./"]
@@ -122,7 +162,7 @@ class Watcher(object):
         
     def refresh(self) -> None:
         for fp, mod in self.modules.items():
-            if mod.modified:
+            if mod.changes:
                 name = path_into_module(fp)
                 importlib.reload(name)
                 mod.changes_resolved()
