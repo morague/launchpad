@@ -68,7 +68,7 @@ class Module:
         return self.module.samefile(other)
 
     def _update_latest(self, version: str) -> None:
-        self.__historics.insert(0, ((datetime.now().isoformat(), version)))
+        self.__historics.insert(0, ((datetime.now().isoformat(), self.__latest)))
         self.__latest = version
 
 
@@ -286,13 +286,24 @@ class Watcher(object):
         grps = self._select_groups(groups)
         return dict(ChainMap([g.payloads() for g in grps]))
     
-    def inject(self, objects: dict[str, Callable], module_path: str | Path) -> None:
+    def reload_module(self, module_path: str | Path) -> None:
+        module = self.get_module(module_path)
+        module.reload()
+    
+    def temporal_objects_from_module(self, module_path: str | Path) -> dict[str, Callable]:
+        module = self.get_module(module_path)
+        return module.temporal_objects()
+    
+    def payload_from_module(self, module_path: str | Path) -> dict[str, dict]:
+        module = self.get_module(module_path)
+        return module.payload()
+
+    def inject_module(self, objects: dict[str, Callable], module_path: str | Path) -> None:
         module = self.get_module(module_path)
         if not isinstance(module, PyModule):
             raise TypeError()
         module.inject(objects)
         
-    
     def _select_groups(self, group_names: tuple[str]) -> list[Group]:
         groups = self.groups.values()
         if len(group_names) == 0:
