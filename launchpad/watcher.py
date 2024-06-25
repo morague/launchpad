@@ -11,7 +11,7 @@ from collections import ChainMap, deque
 import importlib, importlib.util
 
 from types import ModuleType
-from typing import Callable, Type, Optional
+from typing import Callable, Type, Optional, Any
 
 from launchpad.parsers import parse_yaml
 from launchpad.utils import is_activity, is_workflow
@@ -43,7 +43,7 @@ class Module:
     def __init__(self, module_fp: Path, new: bool= False) -> None:
         self.__module = module_fp
         self.__historics = []
-        self._update_latest(self.version())
+        self.__latest = self.version()
         if new:
             self.changes = True
     
@@ -68,19 +68,20 @@ class Module:
         return self.module.samefile(other)
 
     def _update_latest(self, version: str) -> None:
-        self.__historics.insert(0, ((datetime.now().isoformat(), self.__latest)))
+        self.__historics.insert(0, ((datetime.now().isoformat(), self.latest)))
         self.__latest = version
+        
 
 
 class YamlModule(Module):    
-    def __init__(self, module_fp: str, new: bool= False) -> None:
+    def __init__(self, module_fp: Path, new: bool= False) -> None:
         super().__init__(module_fp, new)
     
     def payload(self):
         return parse_yaml(self.module.absolute())
     
 class PyModule(Module):    
-    def __init__(self, module_fp: str, new: bool= False) -> None:
+    def __init__(self, module_fp: Path, new: bool= False) -> None:
         super().__init__(module_fp, new)
         
     @property
@@ -97,6 +98,7 @@ class PyModule(Module):
         module = importlib.util.module_from_spec(spec)
         sys.modules[self.module_name] = module
         spec.loader.exec_module(module)
+        self.changes_resolved()
         return module
     
     def temporal_objects(self) -> dict[str, Callable]:
@@ -146,13 +148,8 @@ class Group(object):
         self.__basepaths = paths
         self.__modules = {}
         self.skip = skip
-        
-    @classmethod
-    def initialize(cls, name: str, paths: list[Path], skip: list[Path] = []) -> Group:
-        group = cls(name, paths, skip)
-        group.visit()
-        return group
-    
+        self.visit()
+            
     def visit(self):
         new = True
         if len(self.modules.keys()) == 0:
@@ -200,7 +197,7 @@ class Group(object):
         [self.__modules.pop(p) for p in removed_paths]
 
     def _explore(self, path: Path) -> list[Path]:
-        abspath = path.absolute()
+        abspath = path.relative_to("./")
         py = glob.glob(f"{abspath}/**/[!_]*.py", recursive=True)
         yaml = glob.glob(f"{abspath}/**/[!_]*.yaml", recursive=True)
         yml = glob.glob(f"{abspath}/**/[!_]*.yml", recursive=True)
@@ -231,13 +228,16 @@ class Watcher(object):
         self.__groups = {}
         self.__basepaths = []
         self.skip = []
-        if skip  is not None:
+
+        if skip is not None:
             self.skip = [Path(p) if isinstance(p, str) else p for p in skip]
         
-        self.add_group("others", [Path(p) if isinstance(p, str) else p for p in paths], self.skip)
+        if paths:        
+            self.add_group("others", [Path(p) if isinstance(p, str) else p for p in paths])
+            
         for k, v in groups.items():
             basepaths = [Path(p) if isinstance(p, str) else p for p in v]
-            self.add_group(k, basepaths, self.skip)
+            self.add_group(k, basepaths)
                 
     def add_group(self, name: str, basepaths: list[str | Path]) -> None:
         if self.groups.get(name, None):
@@ -256,18 +256,15 @@ class Watcher(object):
             raise KeyError()
         return grp
     
-    def get_module(self, path: str | Path) -> PyModule | YamlModule:
+    def get_module(self, path: str | Path, default: Any= None) -> PyModule | YamlModule:
         if isinstance(path, str):
             path = Path(path)
         
-        module, groups = None, deque(self.groups)
-        while (module is None or len(groups) > 0):
+        module, groups = None, deque(self.groups.values())
+        while (module is None and len(groups) > 0):
             group: Group = groups.popleft()
             module = group.modules.get(path, None)
-        
-        if module is None:
-            raise KeyError()
-        return module
+        return module or default
             
 
     def visit(self, *groups: Optional[str]) -> None:
