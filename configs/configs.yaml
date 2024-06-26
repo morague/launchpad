@@ -2,15 +2,16 @@ app:
   env: development
   sanic:
 
-  workers:
-    - type: AsyncWorker
-      client_address: "localhost:7233"
-      task_queue: default
-      workflows:
-        - Task
-      activities:
-        - appfile
-      max_workers: 100
+  modules:
+    workers:
+      - ./workers
+    # workflows:
+    deployments:
+      - ./deployments
+    activities:
+      - ./activities
+    # runners:
+
 
   # temporalio:
 

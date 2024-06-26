@@ -10,9 +10,12 @@ def is_activity(callable: Callable) -> bool:
         return True
     return False
 
-def path_into_module(fp: str) -> str:
-    segments = fp.split("/")
-    path, name = segments[:-1], segments[-1].split(".")[0]
-    if len(path) > 1:
-        name = ".".join(path[1:]) + f".{name}"
-    return name
+def is_runner(callable: Callable) -> bool:
+    if type(callable).__name__ == "ABCMeta" and callable.__bases__[0].__name__ == "Runner":
+        return True
+    return False
+
+def is_temporal_worker(callable: Callable) -> bool:
+    if type(callable).__name__ == "ABCMeta" and callable.__bases__[0].__name__ == "LaunchpadWorker":
+        return True
+    return False

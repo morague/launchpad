@@ -1,0 +1,8 @@
+type: AsyncWorker
+client_address: "localhost:7233"
+task_queue: default
+workflows:
+  - Task
+activities:
+  - appfile
+max_workers: 100

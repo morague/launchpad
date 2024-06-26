@@ -7,6 +7,7 @@ from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from collections import ChainMap, deque
+from itertools import chain
 
 import importlib, importlib.util
 
@@ -14,7 +15,7 @@ from types import ModuleType
 from typing import Callable, Type, Optional, Any
 
 from launchpad.parsers import parse_yaml
-from launchpad.utils import is_activity, is_workflow
+from launchpad.utils import is_activity, is_workflow, is_runner, is_temporal_worker
 
 Datetime = str
 
@@ -106,7 +107,7 @@ class PyModule(Module):
         for k,v in sys.modules[self.module_name].__dict__.items():
             if k.startswith("__"):
                     continue
-            if(is_activity(v) or is_workflow(v)):
+            if(is_activity(v) or is_workflow(v) or is_runner(v) or is_temporal_worker(v)):
                 objects[k] = v
         return objects
     
@@ -158,11 +159,15 @@ class Group(object):
         self._watch_modules()
         self._register_module(new)
     
+    def load(self) -> None:
+        return [module.reload() for _, module in self.pymodules().items()]
+                        
     def reload(self) -> None:
-        for _, module in self.pymodules().items():
-            if module.changes:
-                module.reload()
-                
+        return [module.reload() for _, module in self.pymodules().items() if module.changes]
+
+    def inject(self, objects: dict[str, Callable]) -> None:
+        return [module.inject(objects) for _, module in self.pymodules().items()]                
+
     def temporal_objects(self) -> dict[str, Callable]:
         objects = {}
         for _, module in self.pymodules().items():
@@ -176,10 +181,10 @@ class Group(object):
         return payloads
             
     def pymodules(self) -> dict[str, PyModule]:
-        return {k:v for k,v in self.modules.items() if k.endswith(".py")}
+        return {k:v for k,v in self.modules.items() if k.name.endswith(".py")}
 
     def yamlmodules(self) -> dict[str, YamlModule]:
-        return {k:v for k,v in self.modules.items() if (k.endswith(".yaml") or k.endswith(".yml"))}
+        return {k:v for k,v in self.modules.items() if (k.name.endswith(".yaml") or k.name.endswith(".yml"))}
 
     def _watch_modules(self):
         [module.watch() for module in self.modules.values()]
@@ -215,10 +220,8 @@ class Watcher(object):
         return self.__basepaths
     
     @property
-    def paths(self):
-        paths = []
-        [paths.extend(g.paths) for g in self.groups]
-        return paths
+    def paths(self):        
+        return list(chain.from_iterable([g.paths for g in self.groups.values()]))
 
     @property
     def groups(self):
@@ -274,10 +277,20 @@ class Watcher(object):
     def reload(self, *groups: Optional[str]) -> None:
         grps = self._select_groups(groups)
         [g.reload() for g in grps]
-        
+
+    def load(self, *groups: Optional[str]) -> None:
+        grps = self._select_groups(groups)
+        [g.load() for g in grps]        
+
+    def inject(self, *groups: Optional[str], objects: dict[str, Callable]) -> None:
+        grps = self._select_groups(groups)
+        [g.inject(objects) for g in grps]
+    
     def temporal_objects(self, *groups: Optional[str]) -> dict[str, Callable]:
         grps = self._select_groups(groups)
-        return dict(ChainMap([g.temporal_objects() for g in grps]))
+        objects = {}
+        [objects.update(g.temporal_objects()) for g in grps]
+        return objects
     
     def payloads(self, *groups: Optional[str]) -> dict[str, dict]:
         grps = self._select_groups(groups)
@@ -303,7 +316,35 @@ class Watcher(object):
         
     def _select_groups(self, group_names: tuple[str]) -> list[Group]:
         groups = self.groups.values()
-        if len(group_names) == 0:
+        if len(group_names) > 0:
             groups = [self.get(g) for g in group_names]
         return groups
     
+class LaunchpadWatcher(Watcher):
+    def __init__(self, *paths: str | Path, skip: list[str | Path] | None = None, **groups: list[str | Path]) -> None:
+        super().__init__(*paths, skip=skip, **groups)
+        
+    def workers(self):
+        return [v for v in self.get("workers").payloads().values()]
+
+    def activities(self):
+        return {k:v for k,v in self.get("activities").temporal_objects().items() if is_activity(v)}
+
+    def workflows(self):
+        return {k:v for k,v in self.get("workflows").temporal_objects().items() if is_workflow(v)}
+    
+    def deployments(self): 
+        return {v["name"]:v for v in self.get("deployments").payloads().values()}
+        
+    def temporal_workers(self):
+        return {k:v for k,v in self.get("workers").temporal_objects().items() if is_temporal_worker(v)}
+    
+    def runners(self):
+        return {k:v for k,v in self.get("runners").temporal_objects().items() if is_runner(v)}
+    
+    def _initialize_temporal_objects(self, module_name: str) -> None:
+        groups = ["activities", "workflows", "workers", "runners"]
+        for group in groups:
+            modules = self.get(group).load()
+            objects = self.get(group).temporal_objects()
+            sys.modules[module_name].__dict__.update(objects)

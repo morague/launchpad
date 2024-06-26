@@ -2,6 +2,7 @@ from __future__ import annotations
 import sys
 import time
 
+from abc import ABC
 import asyncio
 import concurrent.futures
 from multiprocessing import Process
@@ -13,13 +14,18 @@ from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner, SandboxR
 from typing import Callable, Any
 
 # from .workflows import Task
-from .activities import activities
-sys.modules[__name__].__dict__.update(**activities)
+# from .activities import activities
+# sys.modules[__name__].__dict__.update(**activities)
 
 QueueName = str
 
+class LaunchpadWorker(ABC):
+    def run(self):
+        ...
+
+
 @define(frozen=True, slots=False)
-class AsyncWorker:
+class AsyncWorker(LaunchpadWorker):
     client_address: str = field(default="localhost:7233")
     task_queue: str = field(default="default")
     workflows: list[Callable] = field(default=[])

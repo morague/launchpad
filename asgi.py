@@ -1,4 +1,4 @@
 from launchpad.main import Launchpad
 
-brcd_printer = Launchpad.create_app()
-app = brcd_printer.app
+launchpad = Launchpad.create_app()
+app = launchpad.app
