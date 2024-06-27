@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import os
 import sys
 import glob
-
+import time
+import signal
+import requests
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from collections import ChainMap, deque
 from itertools import chain
+from multiprocessing import Process
+
 
 import importlib, importlib.util
 
@@ -15,7 +20,7 @@ from types import ModuleType
 from typing import Callable, Type, Optional, Any
 
 from launchpad.parsers import parse_yaml
-from launchpad.utils import is_activity, is_workflow, is_runner, is_temporal_worker
+from launchpad.utils import is_activity, is_workflow, is_runner, is_temporal_worker, aggregate
 
 Datetime = str
 
@@ -57,14 +62,24 @@ class Module:
         return version
             
     def watch(self):
+        changes = False
         version = self.version()
         if version != self.latest:
+            changes = True
             self.changes = True
             self._update_latest(version)
+        return changes
     
     def changes_resolved(self):
         self.changes = False
 
+    def as_json(self) -> dict[str, Any]:
+        return {
+            "path": str(self.module.relative_to("./")),
+            "latest": self.latest,
+            "historics": self.historics
+        }
+    
     def same(self, other: Path) -> bool:
         return self.module.samefile(other)
 
@@ -155,9 +170,10 @@ class Group(object):
         new = True
         if len(self.modules.keys()) == 0:
             new = False
-        self._remove_stale_module()
-        self._watch_modules()
-        self._register_module(new)
+        removed = self._remove_stale_module()
+        modified = self._watch_modules()
+        added = self._register_module(new)
+        return {"added": added, "modified": modified, "removed": removed}
     
     def load(self) -> None:
         return [module.reload() for _, module in self.pymodules().items()]
@@ -187,20 +203,29 @@ class Group(object):
         return {k:v for k,v in self.modules.items() if (k.name.endswith(".yaml") or k.name.endswith(".yml"))}
 
     def _watch_modules(self):
-        [module.watch() for module in self.modules.values()]
+        modified = []
+        for path, module in self.modules.items():
+            changes = module.watch()
+            if changes:
+                modified.append(path.name)
+        return modified
 
     def _register_module(self, new: bool= False):
+        registered = []
         new_paths = list(set(self.paths) - set(self.modules.keys()))
         for path in new_paths:
+            registered.append(path.name)
             if path.suffix in [".yml", ".yaml"]:
                 self.__modules[path] = YamlModule(path, new)
             elif path.suffix == ".py":
                 self.__modules[path] = PyModule(path, new)
-            
+        return registered
+        
     def _remove_stale_module(self):
         removed_paths = list(set(self.modules.keys()) - set(self.paths))
         [self.__modules.pop(p) for p in removed_paths]
-
+        return [p.name for p in removed_paths]
+        
     def _explore(self, path: Path) -> list[Path]:
         abspath = path.relative_to("./")
         py = glob.glob(f"{abspath}/**/[!_]*.py", recursive=True)
@@ -271,8 +296,12 @@ class Watcher(object):
             
 
     def visit(self, *groups: Optional[str]) -> None:
+        res = {}
         grps = self._select_groups(groups)
-        [g.visit() for g in grps]
+        for group in grps:
+            changes = group.visit()
+            res[group.name] = changes
+        return res
         
     def reload(self, *groups: Optional[str]) -> None:
         grps = self._select_groups(groups)
@@ -321,6 +350,9 @@ class Watcher(object):
         return groups
     
 class LaunchpadWatcher(Watcher):
+    watcher: Process | None = None
+    polling_interval: int = 600
+    
     def __init__(self, *paths: str | Path, skip: list[str | Path] | None = None, **groups: list[str | Path]) -> None:
         super().__init__(*paths, skip=skip, **groups)
         
@@ -342,6 +374,27 @@ class LaunchpadWatcher(Watcher):
     def runners(self):
         return {k:v for k,v in self.get("runners").temporal_objects().items() if is_runner(v)}
     
+    def watch(self, polling_interval: int | None = None) -> None:
+        if polling_interval is not None:
+            self.polling_interval = polling_interval
+            
+        if self.watcher is not None:
+            raise ValueError("already running watcher")
+            
+        self.watcher = Process(target=self.poll)
+        self.watcher.start()
+    
+    def poll(self) -> None:
+        while True:
+            time.sleep(self.polling_interval)
+            res = self.visit()
+            if any(aggregate(res)):
+                requests.get("http://localhost:8000/watcher/refresh")
+                        
+    def kill_watcher(self) -> None:
+        self.watcher.kill()
+        self.watcher = None
+        
     def _initialize_temporal_objects(self, module_name: str) -> None:
         groups = ["activities", "workflows", "workers", "runners"]
         for group in groups:

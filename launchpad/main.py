@@ -14,12 +14,13 @@ from launchpad.parsers import get_config
 from launchpad.routes.deployments import deployments
 from launchpad.routes.schedules import schedules
 from launchpad.routes.workers import workersbp
+from launchpad.routes.watcher import watcherbp
 
 """
 launchpad.runners, launchpad.activities, launchpad.workflows, launchpad.workers
 are imported dynamically by the LaunchpadWatcher.
 """
-
+import sys
 Payload = dict[str,Any]
 
 BANNER = """\
@@ -53,6 +54,7 @@ class Launchpad(object):
         self.app.blueprint(deployments)
         self.app.blueprint(schedules)
         self.app.blueprint(workersbp)
+        self.app.blueprint(watcherbp)
         
         watcher = self.initialize_watcher(modules)
         watcher._initialize_temporal_objects(__name__)
@@ -65,7 +67,8 @@ class Launchpad(object):
         workers = watcher.workers()
         objects = watcher.temporal_objects()
         watcher.inject("workflows", "runners", "workers", objects=objects)
-
+        watcher.watch()
+        
         if temporalio is None:
             self.app.ctx.temporal_server = None
             Warning("Make sure TemporalIO is running on another Process")
@@ -78,13 +81,10 @@ class Launchpad(object):
         else:
             # prepare workers
             workers = self.prepare_workers(watcher)
-            print(workers)
             self.app.ctx.workers = WorkersManager.initialize(*workers)
             
         # print(self.app.ctx.workers.ls_workers())
         # self.app.ctx.workers.kill_all_workers()
-        
-        
                 
     @classmethod
     def create_app(cls) -> Launchpad:
