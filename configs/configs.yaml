@@ -2,16 +2,20 @@ app:
   env: development
   sanic:
 
-  modules:
-    workers:
-      - ./workers
-    # workflows:
-    deployments:
-      - ./deployments
-    activities:
-      - ./activities
-    # runners:
 
+  watcher:
+    modules:
+      workers:
+        - ./workers
+      # workflows:
+      deployments:
+        - ./deployments
+      activities:
+        - ./activities
+      # runners:
+    polling:
+      on_server_start: True
+      polling_interval: 10
 
   # temporalio:
 

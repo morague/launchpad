@@ -6,13 +6,15 @@ import glob
 import time
 import signal
 import requests
+import asyncio
+from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from collections import ChainMap, deque
 from itertools import chain
 from multiprocessing import Process
-
+from sanic import Sanic
 
 import importlib, importlib.util
 
@@ -281,7 +283,7 @@ class Watcher(object):
     def get(self, group:str):
         grp = self.groups.get(group, None)
         if grp is None:
-            raise KeyError()
+            raise KeyError("group does not exist")
         return grp
     
     def get_module(self, path: str | Path, default: Any= None) -> PyModule | YamlModule:
@@ -352,11 +354,43 @@ class Watcher(object):
 class LaunchpadWatcher(Watcher):
     watcher: Process | None = None
     polling_interval: int = 600
+    base_modules: dict[str, list[str | Path]] = {
+        "configs": [os.environ.get('CONFIG_FILEPATH', "./configs/configs.yaml")],
+        "workflows": ["./launchpad/workflows.py"],
+        "workers": ["./launchpad/workers.py"],
+        "runners": ["./launchpad/runners.py"],
+        "routes": ["./launchpad/routes"]
+    }
     
     def __init__(self, *paths: str | Path, skip: list[str | Path] | None = None, **groups: list[str | Path]) -> None:
         super().__init__(*paths, skip=skip, **groups)
+    
+    @classmethod
+    def initialize(
+        cls, 
+        *paths,
+        configs: list[str | Path] | None = None,
+        activities: list[str | Path] | None = None,
+        workflows: list[str | Path] | None = None,
+        runners: list[str | Path] | None = None,
+        workers: list[str | Path] | None = None,
+        deployments: list[str | Path] | None = None,
+        ) -> LaunchpadWatcher:
         
-    def workers(self):
+        modules = deepcopy(cls.base_modules)
+        for k,v in locals().items():
+            if k in ["cls", "modules"] or v is None or len(v) == 0:
+                continue
+            elif k == "paths":
+                modules["others"] = list(v)
+            elif k not in modules.keys():
+                modules[k] = v
+            else:
+                modules[k].extend(v)
+        return cls(**modules)
+    
+    
+    def deployments_workers(self):
         return [v for v in self.get("workers").payloads().values()]
 
     def activities(self):
@@ -374,26 +408,44 @@ class LaunchpadWatcher(Watcher):
     def runners(self):
         return {k:v for k,v in self.get("runners").temporal_objects().items() if is_runner(v)}
     
-    def watch(self, polling_interval: int | None = None) -> None:
-        if polling_interval is not None:
-            self.polling_interval = polling_interval
-            
-        if self.watcher is not None:
-            raise ValueError("already running watcher")
-            
-        self.watcher = Process(target=self.poll)
-        self.watcher.start()
-    
-    def poll(self) -> None:
+    def configs(self):
+        return [v for v in self.get("configs").payloads().values()]
+
+    async def poll(self, app: Sanic) -> None:
         while True:
-            time.sleep(self.polling_interval)
+            await asyncio.sleep(self.polling_interval)
             res = self.visit()
+            print(aggregate(res))
             if any(aggregate(res)):
-                requests.get("http://localhost:8000/watcher/refresh")
-                        
-    def kill_watcher(self) -> None:
-        self.watcher.kill()
-        self.watcher = None
+                print("refreshing")
+                await self.update_app(app)
+    
+    async def update_app(self, app: Sanic) -> None:
+        try:
+            activities = self.activities()
+            workflows = self.workflows()
+            runners = self.runners()
+            temporal_workers = self.temporal_workers()
+            deployments_workers =  self.deployments_workers()
+            deployments = self.deployments()
+            # configs = self.configs()
+            
+            objects = self.temporal_objects()
+            self.inject("workflows", "runners", "workers", objects=objects)        
+        except Exception:
+            # failed to load objects # log fail
+            print("failed")
+            return
+        app.ctx.activities = activities
+        app.ctx.workflows = workflows
+        app.ctx.runners = runners
+        app.ctx.temporal_workers = temporal_workers
+        app.ctx.deployments_workers = deployments_workers
+        app.ctx.deployments = deployments
+        ### update configs or not
+    
+    def set_polling_interval(self, interval: int= 600):
+        self.polling_interval = interval
         
     def _initialize_temporal_objects(self, module_name: str) -> None:
         groups = ["activities", "workflows", "workers", "runners"]
@@ -401,3 +453,19 @@ class LaunchpadWatcher(Watcher):
             modules = self.get(group).load()
             objects = self.get(group).temporal_objects()
             sys.modules[module_name].__dict__.update(objects)
+
+
+    # def watch(self, polling_interval: int | None = None) -> None:
+    #     if polling_interval is not None:
+    #         self.polling_interval = polling_interval
+            
+    #     if self.watcher is not None:
+    #         raise ValueError("already running watcher")
+            
+    #     self.watcher = Process(target=self.poll)
+    #     self.watcher.start()
+
+    # def kill_watcher(self) -> None:
+    #     self.watcher.kill()
+    #     self.watcher = None
+    
