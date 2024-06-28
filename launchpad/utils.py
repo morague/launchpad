@@ -28,3 +28,10 @@ def aggregate(payload: dict[str, Any]) -> list[str]:
         elif isinstance(v, list):
             aggregated.extend(v)
     return aggregated
+
+def query_kwargs(args: list[tuple[str, str]]) -> dict[str, Any]:
+    kwargs = {}
+    for k,v in args:
+        if v.isnumeric():
+            kwargs.update({k:int(v)})
+    return kwargs

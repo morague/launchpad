@@ -16,12 +16,17 @@ from launchpad.routes.schedules import schedules
 from launchpad.routes.workers import workersbp
 from launchpad.routes.watcher import watcherbp
 
+from launchpad.listeners import start_watcher
+
 """
 launchpad.runners, launchpad.activities, launchpad.workflows, launchpad.workers
 are imported dynamically by the LaunchpadWatcher.
 """
 import sys
 Payload = dict[str,Any]
+Sanic.START_METHOD_SET = True
+Sanic.start_method = "fork"
+
 
 BANNER = """\
     __                           __                    __
@@ -38,7 +43,7 @@ class Launchpad(object):
         *,
         env: str = "development",
         sanic: Payload | None = {},
-        modules: Payload | None = None,
+        watcher: Payload | None = None,
         temporalio: Payload | None = None,
         logging: Payload | None = None
         ) -> None:
@@ -46,6 +51,7 @@ class Launchpad(object):
         self.env = env
         self.print_banner()
         
+        # -- SANIC
         self.configure_logging(logging)
         self.app = Sanic("Launchpad", log_config=logging)
         self.app.config.update({"ENV":env})
@@ -56,35 +62,46 @@ class Launchpad(object):
         self.app.blueprint(workersbp)
         self.app.blueprint(watcherbp)
         
-        watcher = self.initialize_watcher(modules)
-        watcher._initialize_temporal_objects(__name__)
-        self.app.ctx.watcher = watcher
-        self.app.ctx.activities = watcher.activities()
-        self.app.ctx.workflows = watcher.workflows()
-        self.app.ctx.runners = watcher.runners()
-        self.app.ctx.temporal_workers = watcher.temporal_workers()
-        self.app.ctx.deployments = watcher.deployments()
-        workers = watcher.workers()
-        objects = watcher.temporal_objects()
-        watcher.inject("workflows", "runners", "workers", objects=objects)
-        watcher.watch()
+        # -- WATCHER
+        modules = watcher.get("modules", {})
+        polling = watcher.get("polling", {})
+        polling_interval = polling.get("polling_interval", None)
+        launchpad_watcher = LaunchpadWatcher.initialize(**modules) #self.initialize_watcher(modules)
+        if polling_interval is not None:
+            launchpad_watcher.set_polling_interval(polling_interval)
         
+        launchpad_watcher._initialize_temporal_objects(__name__)
+        self.app.ctx.watcher = launchpad_watcher
+        self.app.ctx.activities = launchpad_watcher.activities()
+        self.app.ctx.workflows = launchpad_watcher.workflows()
+        self.app.ctx.runners = launchpad_watcher.runners()
+        self.app.ctx.temporal_workers = launchpad_watcher.temporal_workers()
+        
+        
+        deployments_settings = launchpad_watcher.deployments()
+        deployments_workers_settings = launchpad_watcher.deployments_workers()
+        self.app.ctx.deployments = deployments_settings
+        self.app.ctx.deployments_workers = deployments_workers_settings
+        
+        objects = launchpad_watcher.temporal_objects()
+        launchpad_watcher.inject("workflows", "runners", "workers", objects=objects)
+        
+        if polling.get("on_server_start", False):
+            self.app.register_listener(start_watcher, "after_server_start")
+
+        # -- TEMPORAL IO SERVER
         if temporalio is None:
             self.app.ctx.temporal_server = None
             Warning("Make sure TemporalIO is running on another Process")
         else:
             pass # start server
         
-        if workers is None:
+        # -- TEMPORAL WORKERS
+        if deployments_workers_settings is None:
             self.app.ctx.workers = None
             Warning("Make sure Some workers are running and binded to your workflows & activities")
         else:
-            # prepare workers
-            workers = self.prepare_workers(watcher)
-            self.app.ctx.workers = WorkersManager.initialize(*workers)
-            
-        # print(self.app.ctx.workers.ls_workers())
-        # self.app.ctx.workers.kill_all_workers()
+            self.app.ctx.workers = WorkersManager.initialize(*deployments_workers_settings)
                 
     @classmethod
     def create_app(cls) -> Launchpad:
@@ -96,30 +113,6 @@ class Launchpad(object):
         logging["handlers"].update(LOGGING_CONFIG_DEFAULTS["handlers"])
         logging["formatters"].update(LOGGING_CONFIG_DEFAULTS["formatters"])  
         return logging
-    
-    def initialize_watcher(self, modules: Payload) -> LaunchpadWatcher:
-        base_modules = {
-            "configs": [os.environ.get('CONFIG_FILEPATH', "./configs/configs.yaml")],
-            "workflows": ["./launchpad/workflows.py"],
-            "workers": ["./launchpad/workers.py"],
-            "runners": ["./launchpad/runners.py"],
-            "routes": ["./launchpad/routes"]
-        }
-        for k,v in modules.items():
-            if k not in base_modules.keys():
-                base_modules[k] = v
-            else:
-                base_modules[k].extend(v)
-        
-        return LaunchpadWatcher(**base_modules)
-    
-    def prepare_workers(self, watcher: LaunchpadWatcher) -> Payload:
-        workers = watcher.workers()
-        for worker in workers:
-            worker.pop("type")
-            worker["activities"] = [v for k,v in watcher.activities().items() if k in worker["activities"]]
-            worker["workflows"] = [v for k,v in watcher.workflows().items() if k in worker["workflows"]]
-        return workers
     
     def print_banner(self):
         print(BANNER)

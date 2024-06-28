@@ -79,7 +79,7 @@ class WorkersManager:
         
     def add_worker(self, **settings):
         print(settings)
-        worker = AsyncWorker(**settings)
+        worker = self._build_worker(settings)
         process = Process(target= worker.run)
         process.start()
         self.__workers[worker.task_queue] = ((worker, process))
@@ -119,5 +119,20 @@ class WorkersManager:
         process.start()
         self.__workers[worker.task_queue] = ((worker, process))
         
+    def _build_worker(self, settings: dict[str, Any]) -> LaunchpadWorker:
+        module = sys.modules[__name__]
+        worker_type = settings.pop("type", None)
+        
+        if worker_type is None:
+            raise ValueError("worker not existing")
 
-
+        workerclass: LaunchpadWorker = getattr(module, worker_type)
+        activities = [getattr(module, k, None) for k in settings["activities"]]
+        workflows = [getattr(module, k, None) for k in settings["workflows"]]
+        if not all(activities + workflows):
+            raise ValueError("activities or workflows not imported in workers module")
+        
+        settings["activities"] = activities
+        settings["workflows"] = workflows
+        
+        return workerclass(**settings)
