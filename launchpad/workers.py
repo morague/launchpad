@@ -13,9 +13,6 @@ from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner, SandboxR
 
 from typing import Callable, Any
 
-# from .workflows import Task
-# from .activities import activities
-# sys.modules[__name__].__dict__.update(**activities)
 
 QueueName = str
 
@@ -52,10 +49,6 @@ class AsyncWorker(LaunchpadWorker):
     def run(self):
         asyncio.run(self._async_threadpool_workers())
     
-    def load(self) -> tuple[list[Callable], list[Callable]]:
-        workflows = list(filter(None, [getattr(sys.modules[__name__], k, None) for k in self.workflows]))
-        activities = list(filter(None, [getattr(sys.modules[__name__], k, None) for k in self.activities]))
-        return (workflows, activities)
         
 @define(slots=True)
 class WorkersManager:
@@ -83,6 +76,7 @@ class WorkersManager:
         process = Process(target= worker.run)
         process.start()
         self.__workers[worker.task_queue] = ((worker, process))
+        return (worker, process)
         
     def kill_worker(self, task_queue: QueueName):
         worker, process = self.__workers.get(task_queue, ((None, None)))
@@ -92,19 +86,22 @@ class WorkersManager:
     
     def kill_all_workers(self) -> None:
         [process.kill() for _, process in self.__workers.values()]
-        
-        
+
     def ls_workers(self):
+        return {k:self.worker_infos(k) for k in self.workers.keys()}
+    
+    def worker_infos(self, task_queue: str) -> dict[str, Any]:
+        worker, process = self.workers.get(task_queue, ((None, None)))
+        if worker is None:
+            raise ValueError("worker does not exist")
+        
         return {
-            worker.task_queue:{
-                "worker":worker.__class__.__name__,
-                "task_queue": worker.task_queue,
-                "workflows": [f.__name__ for f in worker.workflows],
-                "activities": [f.__name__ for f in worker.activities],
-                "alive":process.is_alive(), 
-                "pid":process.pid
-            } 
-            for worker, process in self.workers.values()
+            "worker":worker.__class__.__name__,
+            "task_queue": worker.task_queue,
+            "workflows": [f.__name__ for f in worker.workflows],
+            "activities": [f.__name__ for f in worker.activities],
+            "alive":process.is_alive(), 
+            "pid":process.pid
         }
     
     def restart_worker(self, task_queue: QueueName):
