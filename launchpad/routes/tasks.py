@@ -18,6 +18,7 @@ async def ls_deployments(request: Request):
     return json({"status":200, "reasons": "OK", "data": deplmtns}, status=200)
 
 @tasksbp.get("/deploy/<name:str>")
+@protected("user")
 async def deploy(request: Request, name: str):
     dplmt = request.app.ctx.deployments.get(name, None)
     print(dplmt)

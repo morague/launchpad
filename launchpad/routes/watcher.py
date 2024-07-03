@@ -8,21 +8,26 @@ from launchpad.tasks import watcher_watch
 from launchpad.watcher import LaunchpadWatcher
 from launchpad.utils import query_kwargs
 
+from launchpad.authentication import protected
+
 watcherbp = Blueprint("watcherbp", url_prefix="/watcher")
 
 @watcherbp.get("/modules")
+@protected("user")
 async def modules(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     references = {k:[m.as_json() for m in v.modules.values()] for k,v in watcher.groups.items()}
     return json({"status":200, "reasons": "OK", "data": references}, status=200)
 
 @watcherbp.get("/modules/<group:str>")
+@protected("user")
 async def group_modules(request: Request, group: str):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     references = {group:[m.as_json() for m in watcher.get(group).modules.values()]}
     return json({"status":200, "reasons": "OK", "data": references}, status=200)
 
 @watcherbp.get("/polling")
+@protected("user")
 async def get_pooler(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     if request.app.get_task("watch", raise_exception=False) is not None:
@@ -31,12 +36,14 @@ async def get_pooler(request: Request):
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
     
 @watcherbp.get("/polling/stop")
+@protected("user")
 async def stop_polling(request: Request):
     await request.app.cancel_task("watch")
     request.app.purge_tasks()
     return json({"status":200, "reasons": "OK"}, status=200)
 
 @watcherbp.get("/polling/start")
+@protected("user")
 async def start_polling(request: Request):
     
     query = query_kwargs(request.query_args)
@@ -54,6 +61,7 @@ async def start_polling(request: Request):
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
 
 @watcherbp.get("/polling/interval/<polling_interval:int>")
+@protected("user")
 async def update_polling_interval(request: Request, polling_interval: int):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     watcher.set_polling_interval(polling_interval)
@@ -64,18 +72,21 @@ async def update_polling_interval(request: Request, polling_interval: int):
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
     
 @watcherbp.get("/visit")
+@protected("user")
 async def visit_all(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     changes = watcher.visit()
     return json({"status":200, "reasons": "OK", "data": changes}, status=200)
 
 @watcherbp.get("/visit/<group:str>")
+@protected("user")
 async def visit_group(request: Request, group: str):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     changes = watcher.visit(group)
     return json({"status":200, "reasons": "OK", "data": changes}, status=200)
 
 @watcherbp.get("refresh")
+@protected("user")
 async def refresh_all(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     watcher.visit()

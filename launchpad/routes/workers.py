@@ -8,22 +8,25 @@ from sanic.response import json, empty
 
 from launchpad.workers import WorkersManager
 
+from launchpad.authentication import protected
+
 workersbp = Blueprint("workers", url_prefix="/workers")
 
-
-
 @workersbp.get("/")
+@protected("user")
 async def get_workers_deployments(request: Request):
     deployments_workers = request.app.ctx.deployments_workers
     return json({"status":200, "reasons": "OK", "data": deployments_workers}, status=200)
 
 @workersbp.get("/status")
+@protected("user")
 async def ls_workers(request: Request):
     manager: WorkersManager = request.app.ctx.workers
     infos = manager.ls_workers()
     return json({"status":200, "reasons": "OK", "data": infos}, status=200)
 
 @workersbp.route("/start/<task_queue:str>", methods=["GET","POST"])
+@protected("user")
 async def start_worker(request: Request, task_queue: str):
     worker = request.app.ctx.deployments_workers.get(task_queue, None)
     if worker is None:
@@ -38,11 +41,13 @@ async def start_worker(request: Request, task_queue: str):
     return json({"status":200, "reasons": "OK", "data": manager.worker_infos(task_queue)}, status=200)
     
 @workersbp.route("/stop/<task_queue:str>", methods=["GET","POST"])
+@protected("user")
 async def kill_worker(request: Request, task_queue: str):
     manager: WorkersManager = request.app.ctx.workers
     manager.kill_worker(task_queue)
     return json({"status":200, "reasons": "OK", "data": manager.worker_infos(task_queue)}, status=200)
 
 @workersbp.post("/import")
+@protected("user")
 async def import_worker_deployments(request: Request):
     return empty()
