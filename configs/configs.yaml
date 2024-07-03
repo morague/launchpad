@@ -1,7 +1,8 @@
 app:
   env: development
   sanic:
-
+    app:
+      secret: "xxxxxxx"
 
   watcher:
     modules:
@@ -19,8 +20,15 @@ app:
 
   # temporalio:
 
-
-
+  # authenticator:
+  #   db: ":memory:"
+  #   base_users:
+  #     - username: test
+  #       password: test
+  #       auth_level:
+  #         - "user"
+  #         - "super user"
+  #       max_age: 600
 
 
   logging:
@@ -38,11 +46,11 @@ app:
         formatter: simple
         stream: ext://sys.stdout
 
-      error_stream:
-        class: logging.StreamHandler
-        level: INFO
-        formatter: simple
-        stream: ext://sys.stderr
+      # error_stream:
+      #   class: logging.StreamHandler
+      #   level: INFO
+      #   formatter: simple
+      #   stream: ext://sys.stderr
 
       error_file:
         class: logging.FileHandler
@@ -59,19 +67,6 @@ app:
     loggers:
       endpointAccess:
         level: INFO
-        handlers: [stream, error_stream, error_file, access_file]
+        handlers: [stream, error_file, access_file]
         propagate: False
 
-
-
-
-# workers:
-#   - type: AsyncWorker
-#     client_address: "localhost:7233"
-#     task_queue: default
-#     workflows:
-#       - Task
-#     activities:
-#       - test
-#     max_workers: 100
-    
