@@ -4,18 +4,20 @@ import copy
 
 from sanic import Blueprint
 from sanic import Request
-from sanic.response import empty, json
+from sanic.response import empty, json, redirect
 
-deployments = Blueprint("deployments", url_prefix="/deployments")
+from launchpad.authentication import protected
+
+tasksbp = Blueprint("tasksbp", url_prefix="/tasks")
 
 
-
-@deployments.get("/")
+@tasksbp.get("/")
+@protected("user")
 async def ls_deployments(request: Request):
     deplmtns = request.app.ctx.deployments
-    return json(deplmtns, status=200)
+    return json({"status":200, "reasons": "OK", "data": deplmtns}, status=200)
 
-@deployments.get("/deploy/<name:str>")
+@tasksbp.get("/deploy/<name:str>")
 async def deploy(request: Request, name: str):
     dplmt = request.app.ctx.deployments.get(name, None)
     print(dplmt)
@@ -38,12 +40,5 @@ async def deploy(request: Request, name: str):
         raise ValueError()
     print(deploy)
     await runner()(**workflow)
-    return json({"success": name},status=200)
+    return json({"status":200, "reasons": "OK", "data":{name: "deployed"}},status=200)
 
-@deployments.get("new/scaffold")
-async def scaffold_deployment(request: Request):
-    return empty()
-
-@deployments.post("new/import")
-async def import_deployment(request: Request):
-    return empty()

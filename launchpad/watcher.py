@@ -391,7 +391,7 @@ class LaunchpadWatcher(Watcher):
     
     
     def deployments_workers(self):
-        return [v for v in self.get("workers").payloads().values()]
+        return {v["task_queue"]:v for v in self.get("workers").payloads().values()}
 
     def activities(self):
         return {k:v for k,v in self.get("activities").temporal_objects().items() if is_activity(v)}
@@ -430,8 +430,10 @@ class LaunchpadWatcher(Watcher):
             deployments = self.deployments()
             # configs = self.configs()
             
+            self.reload()
             objects = self.temporal_objects()
-            self.inject("workflows", "runners", "workers", objects=objects)        
+            print(objects)
+            self.inject("workflows", "runners", "workers", objects=objects)
         except Exception:
             # failed to load objects # log fail
             print("failed")

@@ -14,13 +14,13 @@ watcherbp = Blueprint("watcherbp", url_prefix="/watcher")
 async def modules(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     references = {k:[m.as_json() for m in v.modules.values()] for k,v in watcher.groups.items()}
-    return json(references, status=200)
+    return json({"status":200, "reasons": "OK", "data": references}, status=200)
 
 @watcherbp.get("/modules/<group:str>")
 async def group_modules(request: Request, group: str):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     references = {group:[m.as_json() for m in watcher.get(group).modules.values()]}
-    return json(references, status=200)
+    return json({"status":200, "reasons": "OK", "data": references}, status=200)
 
 @watcherbp.get("/polling")
 async def get_pooler(request: Request):
@@ -80,6 +80,6 @@ async def refresh_all(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     watcher.visit()
     watcher.update_app(request.app)
-    return json({"status":200, "reasons": "OK", "data": {}}, status=200)
+    return json({"status":200, "reasons": "OK"}, status=200)
 
 
