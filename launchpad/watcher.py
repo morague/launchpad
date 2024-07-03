@@ -3,28 +3,69 @@ from __future__ import annotations
 import os
 import sys
 import glob
-import time
-import signal
-import requests
 import asyncio
+import logging
 from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from collections import ChainMap, deque
+from functools import wraps
 from itertools import chain
 from multiprocessing import Process
 from sanic import Sanic
 
-import importlib, importlib.util
+import importlib
+import importlib.util
 
 from types import ModuleType
-from typing import Callable, Type, Optional, Any
+from typing import Callable, Optional, Any
 
 from launchpad.parsers import parse_yaml
-from launchpad.utils import is_activity, is_workflow, is_runner, is_temporal_worker, aggregate
+from launchpad.utils import (
+    is_activity,
+    is_workflow,
+    is_runner,
+    is_temporal_worker,
+    aggregate,
+    to_path
+)
 
 Datetime = str
+Payload = dict[str, Any]
+
+logger = logging.getLogger("watcher")
+
+def log_group_visit(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        self: Group = args[0]
+        changes = f(*args, **kwargs)
+        total_changes = len(aggregate(changes))
+        if total_changes == 0:
+            return changes
+        else:
+            logger.info(f"> Visiting {self.name}: {str(total_changes)} changes found.")
+        for k,v in changes.items():
+            if len(v) == 0:
+                continue
+            logger.info(f"> {k} files:")
+            for path in v:
+                module_or_path = self.modules.get(path, path)
+                logger.info(f"    {str(module_or_path)}")
+        return changes
+    return wrapper
+
+def log_watcher_visit(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        self: Group = args[0]
+        changes = f(*args, **kwargs)
+        total_changes = len(aggregate(changes))
+        if total_changes == 0:
+            logger.info(f"> {str(total_changes)} changes found.")
+        return changes
+    return wrapper
 
 class Module:
     __module: Path
@@ -48,10 +89,10 @@ class Module:
     def ftype(self):
         return self.module.suffix.strip(".")
     
-    def __init__(self, module_fp: Path, new: bool= False) -> None:
-        self.__module = module_fp
-        self.__historics = []
+    def __init__(self, module_fp: str | Path, new: bool= False) -> None:
+        self.__module = self._parse_path(module_fp)
         self.__latest = self.version()
+        self.__historics = [((datetime.now().isoformat(), self.latest))]
         if new:
             self.changes = True
     
@@ -79,6 +120,7 @@ class Module:
         return {
             "path": str(self.module.relative_to("./")),
             "latest": self.latest,
+            "changes": self.changes,
             "historics": self.historics
         }
     
@@ -86,17 +128,27 @@ class Module:
         return self.module.samefile(other)
 
     def _update_latest(self, version: str) -> None:
-        self.__historics.insert(0, ((datetime.now().isoformat(), self.latest)))
         self.__latest = version
+        self.__historics.insert(0, ((datetime.now().isoformat(), self.latest)))
         
+    def _parse_path(self, path: str | Path):
+        if isinstance(path, str):
+            path = Path(path)
+        if os.path.exists(path) is False:
+            raise ValueError("path doesn't exist")
+        return path
 
 
 class YamlModule(Module):    
     def __init__(self, module_fp: Path, new: bool= False) -> None:
         super().__init__(module_fp, new)
     
-    def payload(self):
+    def payload(self) -> Payload:
         return parse_yaml(self.module.absolute())
+    
+    def load(self) -> Payload:
+        self.changes_resolved()
+        return self.payload()
     
 class PyModule(Module):    
     def __init__(self, module_fp: Path, new: bool= False) -> None:
@@ -161,13 +213,24 @@ class Group(object):
                 paths.append(p)
         return paths
     
-    def __init__(self, name: str, paths: list[Path], skip: list[Path] = []) -> None:
+    def __init__(self, name: str, paths: list[str | Path], skip: list[str | Path] = []) -> None:
         self.__name = name
-        self.__basepaths = paths
+        self.__basepaths = to_path(paths)
         self.__modules = {}
-        self.skip = skip
+        self.skip = to_path(skip)
         self.visit()
-            
+    
+    def add_basepaths(self, *paths) -> list[Path]:
+        paths = to_path(paths)
+        self.__basepaths = list(set(self.basepaths).union(set(paths)))
+        self.visit()
+        
+    def remove_basepaths(self, *paths) -> list[Path]:
+        paths = to_path(paths)
+        self.__basepaths = list(set(self.basepaths) - set(paths))
+        self.visit()
+
+    @log_group_visit
     def visit(self):
         new = True
         if len(self.modules.keys()) == 0:
@@ -195,7 +258,7 @@ class Group(object):
     def payloads(self) -> dict[str, dict]:
         payloads = {}
         for name, yaml in self.yamlmodules().items():
-            payloads.update({name: yaml.payload()})
+            payloads.update({name: yaml.load()})
         return payloads
             
     def pymodules(self) -> dict[str, PyModule]:
@@ -209,14 +272,14 @@ class Group(object):
         for path, module in self.modules.items():
             changes = module.watch()
             if changes:
-                modified.append(path.name)
+                modified.append(path)
         return modified
 
     def _register_module(self, new: bool= False):
         registered = []
         new_paths = list(set(self.paths) - set(self.modules.keys()))
         for path in new_paths:
-            registered.append(path.name)
+            registered.append(path)
             if path.suffix in [".yml", ".yaml"]:
                 self.__modules[path] = YamlModule(path, new)
             elif path.suffix == ".py":
@@ -226,16 +289,17 @@ class Group(object):
     def _remove_stale_module(self):
         removed_paths = list(set(self.modules.keys()) - set(self.paths))
         [self.__modules.pop(p) for p in removed_paths]
-        return [p.name for p in removed_paths]
+        return removed_paths
         
     def _explore(self, path: Path) -> list[Path]:
-        abspath = path.relative_to("./")
-        py = glob.glob(f"{abspath}/**/[!_]*.py", recursive=True)
-        yaml = glob.glob(f"{abspath}/**/[!_]*.yaml", recursive=True)
-        yml = glob.glob(f"{abspath}/**/[!_]*.yml", recursive=True)
-        return [Path(p) for p in py + yaml + yml]
+        relpath = path.relative_to("./")
+        py = glob.glob(f"{relpath}/**/[!_]*.py", recursive=True)
+        yaml = glob.glob(f"{relpath}/**/[!_]*.yaml", recursive=True)
+        yml = glob.glob(f"{relpath}/**/[!_]*.yml", recursive=True)
+        return [Path(p) for p in py + yaml + yml if Path(p) not in self.skip]
         
-    
+
+
 
 class Watcher(object):
     __basepaths: list[Path]
@@ -254,32 +318,92 @@ class Watcher(object):
     def groups(self):
         return self.__groups
     
+    @property
+    def modules(self):
+        return {k:[m for m in v.modules.values()] for k,v in self.groups.items()}
+
+    @property
+    def changed_modules(self):
+        return {k:[m for m in v.modules.values() if m.changes] for k,v in self.groups.items()}
+
+    @property
+    def unchanged_modules(self):
+        return {k:[m for m in v.modules.values() if m.changes is False] for k,v in self.groups.items()}
+
     def __init__(self, *paths: str | Path, skip: list[str | Path] | None = None, **groups: list[str | Path]) -> None:
         self.__groups = {}
         self.__basepaths = []
         self.skip = []
 
         if skip is not None:
-            self.skip = [Path(p) if isinstance(p, str) else p for p in skip]
+            self.skip = to_path(skip)
         
         if paths:        
-            self.add_group("others", [Path(p) if isinstance(p, str) else p for p in paths])
+            self.add_group("others", paths)
             
-        for k, v in groups.items():
-            basepaths = [Path(p) if isinstance(p, str) else p for p in v]
+        for k, basepaths in groups.items():
             self.add_group(k, basepaths)
-                
+
     def add_group(self, name: str, basepaths: list[str | Path]) -> None:
         if self.groups.get(name, None):
             raise ValueError()
-        basepaths = [Path(p) if isinstance(p, str) else p for p in basepaths]
-        self.__basepaths.append(basepaths)
+        basepaths = to_path(basepaths)
+        self.__basepaths.extend(basepaths)
         self.__groups[name] = Group(name, basepaths, self.skip)
         
     def remove_group(self, name: str):
         group = self.__groups.pop(name)
         [self.__basepaths.pop(i) for i in range(len(group.basepaths)) if self.basepaths[i] in group.basepaths]
+    
+    def add_paths(self, *paths: str | Path, group: str) -> list[Path]:
+        """
+        added paths all goes to watcher and group basepaths
+        must verify that the paths is not in skip. 
+        if this is the case, th path must be removed.
+        """
+        paths = to_path(paths)
+        gp = self.groups.get(group, None)
+        if gp is None:
+            raise ValueError("group does not exist")
+
+        # find skiped paths and remove them form skiped paths. transfert new skip to groups
+        skiped = [p for p in self.skip if p in paths]
+        self.skip = list(set(self.skip) - set(skiped))
+        for g in self.groups.values():
+            g.skip = self.skip
+            
+        # update basepaths by adding paths. transfert new paths to related group
+        self.__basepaths = list(set(self.basepaths).union(set(paths)))
+        gp.add_basepaths(*paths)
+
+        print("base >>", self.basepaths)
+        print("skip >>", self.skip)
+        print("group base >>", gp.basepaths)
+        print("group skip >>", gp.skip)
+
+    def remove_paths(self, *paths: str | Path, group: str) -> list[Path]:
+        """
+        removing is in 2 steps: 
+        (1) verify that the path is in the basepaths.
+        (2) > when it is the case, the path must be removed from watcher and group basepaths.
+            > if this is not the case, then the paths must added into skip and passed to all groups
+        """        
+        paths = to_path(paths)
+        gp = self.groups.get(group, None)
+        if gp is None:
+            raise ValueError("group does not exist")
+
+        # updating skip Paths, and pass skips to groups
+        skiping = [p for p in paths if p not in self.basepaths]
+        self.skip = list(set(tuple((self.skip))).union(set(skiping)))
+        for g in self.groups.values():
+            g.skip = self.skip
         
+        # remove paths from basepaths. transfert removal to related group
+        self.__basepaths = list(set(self.basepaths) - set(paths))
+        gp.remove_basepaths(*paths)
+        
+    
     def get(self, group:str):
         grp = self.groups.get(group, None)
         if grp is None:
@@ -295,8 +419,8 @@ class Watcher(object):
             group: Group = groups.popleft()
             module = group.modules.get(path, None)
         return module or default
-            
-
+    
+    @log_watcher_visit
     def visit(self, *groups: Optional[str]) -> None:
         res = {}
         grps = self._select_groups(groups)
@@ -351,9 +475,11 @@ class Watcher(object):
             groups = [self.get(g) for g in group_names]
         return groups
     
+    
 class LaunchpadWatcher(Watcher):
     watcher: Process | None = None
     polling_interval: int = 600
+    automatic_refresh: bool = True
     base_modules: dict[str, list[str | Path]] = {
         "configs": [os.environ.get('CONFIG_FILEPATH', "./configs/configs.yaml")],
         "workflows": ["./launchpad/workflows.py"],
@@ -379,15 +505,13 @@ class LaunchpadWatcher(Watcher):
         
         modules = deepcopy(cls.base_modules)
         for k,v in locals().items():
-            if k in ["cls", "modules"] or v is None or len(v) == 0:
+            if k in ["cls", "modules"] or v is None or len(v) == 0 or k == "paths":
                 continue
-            elif k == "paths":
-                modules["others"] = list(v)
             elif k not in modules.keys():
                 modules[k] = v
             else:
                 modules[k].extend(v)
-        return cls(**modules)
+        return cls(*paths, **modules)
     
     
     def deployments_workers(self):
@@ -414,11 +538,15 @@ class LaunchpadWatcher(Watcher):
     async def poll(self, app: Sanic) -> None:
         while True:
             await asyncio.sleep(self.polling_interval)
-            res = self.visit()
-            print(aggregate(res))
-            if any(aggregate(res)):
-                print("refreshing")
+            logger.info("Visiting files...")
+            self.visit()
+            changes = any(aggregate(self.changed_modules))
+            if self.automatic_refresh and changes:
+                logger.info("Automatic file refreshing...")
                 await self.update_app(app)
+            elif changes and self.automatic_refresh is False:
+                logger.info("Automatic refresing is deactivated.")
+            logger.info(f"Next automatic visit in {self.polling_interval}...")
     
     async def update_app(self, app: Sanic) -> None:
         try:
@@ -428,15 +556,12 @@ class LaunchpadWatcher(Watcher):
             temporal_workers = self.temporal_workers()
             deployments_workers =  self.deployments_workers()
             deployments = self.deployments()
-            # configs = self.configs()
             
             self.reload()
             objects = self.temporal_objects()
-            print(objects)
             self.inject("workflows", "runners", "workers", objects=objects)
         except Exception:
-            # failed to load objects # log fail
-            print("failed")
+            logger.info("Modules Update failed...")
             return
         app.ctx.activities = activities
         app.ctx.workflows = workflows
@@ -444,10 +569,13 @@ class LaunchpadWatcher(Watcher):
         app.ctx.temporal_workers = temporal_workers
         app.ctx.deployments_workers = deployments_workers
         app.ctx.deployments = deployments
-        ### update configs or not
+        logger.info("Modules Updated!")
     
     def set_polling_interval(self, interval: int= 600):
         self.polling_interval = interval
+        
+    def update_automatic_refresh(self, toggle: bool= True):
+        self.automatic_refresh = toggle
         
     def _initialize_temporal_objects(self, module_name: str) -> None:
         groups = ["activities", "workflows", "workers", "runners"]
@@ -456,6 +584,7 @@ class LaunchpadWatcher(Watcher):
             objects = self.get(group).temporal_objects()
             sys.modules[module_name].__dict__.update(objects)
 
+        
 
     # def watch(self, polling_interval: int | None = None) -> None:
     #     if polling_interval is not None:

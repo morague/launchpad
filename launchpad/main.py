@@ -79,9 +79,12 @@ class Launchpad(object):
         modules = watcher.get("modules", {})
         polling = watcher.get("polling", {})
         polling_interval = polling.get("polling_interval", None)
+        automatic_refresh = polling.get("automatic_refresh", None)
         launchpad_watcher = LaunchpadWatcher.initialize(**modules)
         if polling_interval is not None:
             launchpad_watcher.set_polling_interval(polling_interval)
+        if automatic_refresh is not None:
+            launchpad_watcher.update_automatic_refresh(automatic_refresh)
         
         launchpad_watcher._initialize_temporal_objects(__name__)
         self.app.ctx.watcher = launchpad_watcher

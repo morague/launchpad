@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Type, Callable, Any
 
 def is_workflow(cls: Type) -> bool:
@@ -35,3 +36,6 @@ def query_kwargs(args: list[tuple[str, str]]) -> dict[str, Any]:
         if v.isnumeric():
             kwargs.update({k:int(v)})
     return kwargs
+
+def to_path(paths: list[str | Path]) -> list[Path]:
+    return [Path(p) if isinstance(p, str) else p for p in paths]

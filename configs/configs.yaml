@@ -16,7 +16,9 @@ app:
       # runners:
     polling:
       on_server_start: True
+      automatic_refresh: True
       polling_interval: 10
+      
 
   # temporalio:
 
@@ -46,12 +48,6 @@ app:
         formatter: simple
         stream: ext://sys.stdout
 
-      # error_stream:
-      #   class: logging.StreamHandler
-      #   level: INFO
-      #   formatter: simple
-      #   stream: ext://sys.stderr
-
       error_file:
         class: logging.FileHandler
         level: ERROR
@@ -69,4 +65,7 @@ app:
         level: INFO
         handlers: [stream, error_file, access_file]
         propagate: False
-
+      watcher:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
