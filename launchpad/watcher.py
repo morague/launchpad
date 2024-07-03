@@ -187,7 +187,7 @@ class Group(object):
     __name: str
     __basepaths: list[Path]    
     __modules: dict[Path, Module]
-    skip: list[Path]
+    skips: list[Path]
     
     @property
     def name(self):
@@ -205,7 +205,7 @@ class Group(object):
     def paths(self):
         paths = []
         for p in self.basepaths:
-            if p in self.skip:
+            if p in self.skips:
                 continue            
             if p.is_dir():
                 paths.extend(self._explore(p))
@@ -213,21 +213,25 @@ class Group(object):
                 paths.append(p)
         return paths
     
-    def __init__(self, name: str, paths: list[str | Path], skip: list[str | Path] = []) -> None:
+    def __init__(self, name: str, paths: list[str | Path], skips: list[str | Path] = []) -> None:
         self.__name = name
         self.__basepaths = to_path(paths)
         self.__modules = {}
-        self.skip = to_path(skip)
+        self.skips = to_path(skips)
         self.visit()
     
-    def add_basepaths(self, *paths) -> list[Path]:
+    def add_paths(self, *paths) -> list[Path]:
         paths = to_path(paths)
+        skipped = [p for p in self.skips if p in paths]
         self.__basepaths = list(set(self.basepaths).union(set(paths)))
+        self.skips = list(set(self.skips) - set(skipped))
         self.visit()
         
-    def remove_basepaths(self, *paths) -> list[Path]:
+    def remove_paths(self, *paths) -> list[Path]:
         paths = to_path(paths)
+        skipping = [p for p in paths if p not in self.basepaths]
         self.__basepaths = list(set(self.basepaths) - set(paths))
+        self.skips = list(set(self.skips).union(set(skipping)))
         self.visit()
 
     @log_group_visit
@@ -296,28 +300,30 @@ class Group(object):
         py = glob.glob(f"{relpath}/**/[!_]*.py", recursive=True)
         yaml = glob.glob(f"{relpath}/**/[!_]*.yaml", recursive=True)
         yml = glob.glob(f"{relpath}/**/[!_]*.yml", recursive=True)
-        return [Path(p) for p in py + yaml + yml if Path(p) not in self.skip]
+        return [Path(p) for p in py + yaml + yml if Path(p) not in self.skips]
         
 
 
 
 class Watcher(object):
-    __basepaths: list[Path]
     __groups: dict[str, Group]
-    skip: list[Path]
+
+    @property
+    def groups(self):
+        return self.__groups
 
     @property
     def basepaths(self):
-        return self.__basepaths
-    
+        return list(chain.from_iterable([g.basepaths for g in self.groups.values()]))
+        
     @property
     def paths(self):        
         return list(chain.from_iterable([g.paths for g in self.groups.values()]))
 
     @property
-    def groups(self):
-        return self.__groups
-    
+    def skips(self):
+        return list(chain.from_iterable([g.skips for g in self.groups.values()]))
+        
     @property
     def modules(self):
         return {k:[m for m in v.modules.values()] for k,v in self.groups.items()}
@@ -330,80 +336,32 @@ class Watcher(object):
     def unchanged_modules(self):
         return {k:[m for m in v.modules.values() if m.changes is False] for k,v in self.groups.items()}
 
-    def __init__(self, *paths: str | Path, skip: list[str | Path] | None = None, **groups: list[str | Path]) -> None:
-        self.__groups = {}
-        self.__basepaths = []
-        self.skip = []
-
-        if skip is not None:
-            self.skip = to_path(skip)
-        
+    def __init__(self, *paths: str | Path, **groups: Group) -> None:
+        self.__groups = {k:v for k,v in groups.items()}
         if paths:        
-            self.add_group("others", paths)
-            
-        for k, basepaths in groups.items():
-            self.add_group(k, basepaths)
+            self.add_group("others", paths, [])
 
-    def add_group(self, name: str, basepaths: list[str | Path]) -> None:
+    def add_group(self, name: str, basepaths: list[str | Path], skips: list[str | Path]) -> None:
         if self.groups.get(name, None):
             raise ValueError()
         basepaths = to_path(basepaths)
-        self.__basepaths.extend(basepaths)
-        self.__groups[name] = Group(name, basepaths, self.skip)
+        self.__groups[name] = Group(name, basepaths, skips)
         
     def remove_group(self, name: str):
         group = self.__groups.pop(name)
-        [self.__basepaths.pop(i) for i in range(len(group.basepaths)) if self.basepaths[i] in group.basepaths]
     
-    def add_paths(self, *paths: str | Path, group: str) -> list[Path]:
-        """
-        added paths all goes to watcher and group basepaths
-        must verify that the paths is not in skip. 
-        if this is the case, th path must be removed.
-        """
-        paths = to_path(paths)
-        gp = self.groups.get(group, None)
-        if gp is None:
+    def add_paths(self, group_name: str, paths: list[str | Path]) -> None:
+        group = self.groups.get(group_name, None)
+        if group is None:
             raise ValueError("group does not exist")
-
-        # find skiped paths and remove them form skiped paths. transfert new skip to groups
-        skiped = [p for p in self.skip if p in paths]
-        self.skip = list(set(self.skip) - set(skiped))
-        for g in self.groups.values():
-            g.skip = self.skip
+        group.add_paths(*paths)
+    
+    def remove_paths(self, group_name: str, paths: list[str | Path]) -> None:
+        group = self.groups.get(group_name, None)
+        if group is None:
+            raise ValueError("group does not exist")
+        group.remove_paths(*paths)
             
-        # update basepaths by adding paths. transfert new paths to related group
-        self.__basepaths = list(set(self.basepaths).union(set(paths)))
-        gp.add_basepaths(*paths)
-
-        print("base >>", self.basepaths)
-        print("skip >>", self.skip)
-        print("group base >>", gp.basepaths)
-        print("group skip >>", gp.skip)
-
-    def remove_paths(self, *paths: str | Path, group: str) -> list[Path]:
-        """
-        removing is in 2 steps: 
-        (1) verify that the path is in the basepaths.
-        (2) > when it is the case, the path must be removed from watcher and group basepaths.
-            > if this is not the case, then the paths must added into skip and passed to all groups
-        """        
-        paths = to_path(paths)
-        gp = self.groups.get(group, None)
-        if gp is None:
-            raise ValueError("group does not exist")
-
-        # updating skip Paths, and pass skips to groups
-        skiping = [p for p in paths if p not in self.basepaths]
-        self.skip = list(set(tuple((self.skip))).union(set(skiping)))
-        for g in self.groups.values():
-            g.skip = self.skip
-        
-        # remove paths from basepaths. transfert removal to related group
-        self.__basepaths = list(set(self.basepaths) - set(paths))
-        gp.remove_basepaths(*paths)
-        
-    
     def get(self, group:str):
         grp = self.groups.get(group, None)
         if grp is None:
@@ -488,30 +446,19 @@ class LaunchpadWatcher(Watcher):
         "routes": ["./launchpad/routes"]
     }
     
-    def __init__(self, *paths: str | Path, skip: list[str | Path] | None = None, **groups: list[str | Path]) -> None:
-        super().__init__(*paths, skip=skip, **groups)
+    def __init__(self, *paths: str | Path,  **groups: Group) -> None:
+        super().__init__(*paths, **groups)
     
     @classmethod
-    def initialize(
-        cls, 
-        *paths,
-        configs: list[str | Path] | None = None,
-        activities: list[str | Path] | None = None,
-        workflows: list[str | Path] | None = None,
-        runners: list[str | Path] | None = None,
-        workers: list[str | Path] | None = None,
-        deployments: list[str | Path] | None = None,
-        ) -> LaunchpadWatcher:
-        
-        modules = deepcopy(cls.base_modules)
-        for k,v in locals().items():
-            if k in ["cls", "modules"] or v is None or len(v) == 0 or k == "paths":
-                continue
-            elif k not in modules.keys():
-                modules[k] = v
-            else:
-                modules[k].extend(v)
-        return cls(*paths, **modules)
+    def initialize(cls, *paths,**groups: dict[str, list[str | Path]]) -> LaunchpadWatcher:
+        basegroups = {}
+        for k in list(set(cls.base_modules).union(set(groups.keys()))):
+            basepaths = cls.base_modules.get(k, [])
+            group = groups.get(k, {})
+            skips = group.get("skips", [])
+            basepaths.extend(group.get("basepaths", []))
+            basegroups.update({k:Group(k, basepaths, skips)})
+        return cls(*paths, **basegroups)
     
     
     def deployments_workers(self):

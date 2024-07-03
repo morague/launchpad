@@ -154,7 +154,7 @@ async def add_to_group(request: Request, group: str):
     if exist is None:
         raise KeyError("group does not exist")
     
-    watcher.add_paths(*paths, group=group) #, "data": {"added": added}
+    watcher.add_paths(group, paths) #, "data": {"added": added}
     return json({"status":200, "reasons": "OK"}, status=200)
     
     
@@ -168,6 +168,6 @@ async def remove_to_group(request: Request, group: str):
     exist = watcher.groups.get(group, None)
     if exist is None:
         raise KeyError("group does not exist")
-    watcher.remove_paths(*paths, group=group) #, "data": {"removed": removed}
+    watcher.remove_paths(group, paths) #, "data": {"removed": removed}
     return json({"status":200, "reasons": "OK"}, status=200)    
 

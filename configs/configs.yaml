@@ -7,12 +7,15 @@ app:
   watcher:
     modules:
       workers:
-        - ./workers
+        basepaths:
+          - ./workers
       # workflows:
       deployments:
-        - ./deployments
+        basepaths:
+          - ./deployments
       activities:
-        - ./activities
+        basepaths:
+          - ./activities
       # runners:
     polling:
       on_server_start: True
