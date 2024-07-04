@@ -16,16 +16,33 @@ class Intervals(TypedDict):
     offset: list[TimedeltaArgs]
     
 class Calendar(TypedDict):
-    ...
+    second: list[int]
+    minute: list[int]
+    hour: list[int]
+    day_of_month: list[int]
+    month: list[int]
+    year: list[int]
+    day_of_week: list[int]
+    comment: str
 
 class TimedeltaArgs(TypedDict):
-    days: float
-    seconds: float
-    microseconds: float
-    milliseconds: float
-    minutes: float
-    hours: float
-    weeks: float
+    days: int
+    seconds: int
+    microseconds: int
+    milliseconds: int
+    minutes: int
+    hours: int
+    weeks: int
+    
+class DateTimeArgs(TypedDict):
+    year: int
+    month: int
+    day: int
+    hours: int
+    minute: int
+    second: int
+    microsecond: int
+    tzinfo: str
 
 
 class shared_signature(Generic[F]):
@@ -65,7 +82,7 @@ class WorkflowRunner(Runner):
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return await self.run(*args, **kwargs)
 
-        
+
         
 
 class ScheduledWorkflowRunner(Runner):
@@ -75,7 +92,9 @@ class ScheduledWorkflowRunner(Runner):
         calendars: Optional[list[Calendar]] | None = None,
         crons: Optional[list[str]] | None = None,
         skip: Optional[list[Calendar]] | None = None,
-        start_at: Optional[list[TimedeltaArgs]] | None = None
+        start_at: Optional[list[TimedeltaArgs]] | None = None,
+        end_at: Optional[DateTimeArgs] | None = None,
+        jitter: Optional[TimedeltaArgs] | None = None,
         ) -> dict:
         specs = {}
         if intervals is not None:
@@ -88,7 +107,7 @@ class ScheduledWorkflowRunner(Runner):
         if calendars is not None:
             schedules = []
             for sched in calendars:
-                schedule = {k:ScheduleRange(v) for k,v in sched.items() if v is not None}
+                schedule = {k:[ScheduleRange(d) for d in v] for k,v in sched.items() if v is not None}
                 schedules.append(ScheduleCalendarSpec(**schedule))
             specs["calendars"] = schedules
         
@@ -99,20 +118,22 @@ class ScheduledWorkflowRunner(Runner):
         if skip is not None:
             schedules = []
             for sched in calendars:
-                schedule = {k:ScheduleRange(v) for k,v in sched.items() if v is not None}
+                schedule = {k:[ScheduleRange(d) for d in v] for k,v in sched.items() if v is not None}
                 schedules.append(ScheduleCalendarSpec(**schedule))
             specs["skip"] = schedules
         
         if start_at is not None:
             specs["start_at"] = datetime(**start_at)
+        if end_at is not None:
+            specs["start_at"] = datetime(**end_at)
+        if jitter is not None:
+            specs["jitter"] = timedelta(**jitter)
         return specs
                
-        
-
     async def run(
         self,
         workflow: Callable,
-        workflow_kwargs: list[Any],
+        workflow_kwargs: dict[str, Any],
         scheduler_id: str,
         workflow_id: str,
         task_queue: str,
@@ -120,7 +141,9 @@ class ScheduledWorkflowRunner(Runner):
         calendars: Optional[list[Calendar]] | None = None,
         crons: Optional[list[str]] | None = None,
         skip: Optional[list[Calendar]] | None = None,
-        start_at: Optional[list[TimedeltaArgs]] | None = None,
+        start_at: Optional[DateTimeArgs] | None = None,
+        end_at: Optional[DateTimeArgs] | None = None,
+        jitter: Optional[TimedeltaArgs] | None = None,
         tz: str = "Europe/Paris",
         trigger_immediately: bool = False,
         client_address: str = "localhost:7233",
@@ -137,7 +160,17 @@ class ScheduledWorkflowRunner(Runner):
                     id=workflow_id,
                     task_queue=task_queue
                 ),
-                spec=ScheduleSpec(**self._build_specs(intervals, calendars, crons, skip, start_at), time_zone_name=tz)
+                spec=ScheduleSpec(**self._build_specs(
+                    intervals, 
+                    calendars, 
+                    crons, 
+                    skip, 
+                    start_at, 
+                    end_at, 
+                    jitter
+                    ), 
+                    time_zone_name=tz
+                )
             ),
         )
 

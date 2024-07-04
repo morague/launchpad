@@ -41,5 +41,5 @@ async def deploy(request: Request, name: str):
         raise ValueError()
     print(deploy)
     await runner()(**workflow)
-    return json({"status":200, "reasons": "OK", "data":{name: "deployed"}},status=200)
+    return json({"status":200, "reasons": "OK", "data":{"deployed": name}},status=200)
 

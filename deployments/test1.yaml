@@ -1,6 +1,7 @@
 name: test1
 runner: ScheduledWorkflowRunner
 workflow:
+  client_address: localhost:7233
   workflow: Task
   workflow_id: cute_id
   task_queue: default
@@ -8,7 +9,9 @@ workflow:
     activity: appfile
     args: 
       - Scheduled_ROMAIN
-    client_address: localhost:7233
+    start_to_close_timeout:
+      seconds: 5
+
 schedule:
   scheduler_id: cute_schedule_id
   intervals:
