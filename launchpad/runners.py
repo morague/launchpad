@@ -1,10 +1,19 @@
 from __future__ import annotations
-from datetime import timedelta, datetime
-from temporalio.client import Client, Schedule, ScheduleActionStartWorkflow, ScheduleSpec, ScheduleIntervalSpec, ScheduleCalendarSpec, ScheduleRange
-
-
-
+import sys
 from abc import ABC, abstractmethod
+from datetime import timedelta, datetime
+from temporalio.client import (
+    Client,
+    Schedule,
+    ScheduleActionStartWorkflow,
+    ScheduleSpec,
+    ScheduleIntervalSpec,
+    ScheduleCalendarSpec,
+    ScheduleRange
+)
+from temporalio.worker import Worker
+
+
 from typing import Any, Callable, TypedDict, TypeVar, Generic, Optional
 
 
@@ -82,8 +91,56 @@ class WorkflowRunner(Runner):
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return await self.run(*args, **kwargs)
 
-
+class WorkflowRunnerWithTempWorker(Runner):
+    async def run(
+        self,
+        workflow: Callable,
+        workflow_kwargs: list[Any],
+        workflow_id: str,
+        task_queue: str,
+        client_address: str = "localhost:7233"):
+        client = await Client.connect(client_address)
+        activity = getattr(sys.modules[__name__], workflow_kwargs.get("activity", None))
+        if activity is None:
+            raise ValueError()
         
+        async with Worker(client, task_queue=task_queue, workflows=[workflow], activities=[activity]):
+            result = await client.execute_workflow(
+                workflow, 
+                workflow_kwargs, 
+                id=workflow_id, 
+                task_queue=task_queue
+            )
+    
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return await self.run(*args, **kwargs)
+
+class WorkflowRunnerWithStartSignal(Runner):
+    async def run(
+        self,
+        workflow: Callable,
+        workflow_kwargs: list[Any],
+        workflow_id: str,
+        task_queue: str,
+        client_address: str = "localhost:7233",
+        ) -> None:
+        
+        client = await Client.connect(client_address)
+        
+        # TODO: set deployment template configs for start_workflow method runner 
+        handle = await client.start_workflow(
+            workflow, 
+            workflow_kwargs, 
+            id=workflow_id, 
+            task_queue=task_queue,
+            start_signal="trigger",
+            start_signal_args=["start"],
+            cron_schedule="0 0 * * *"
+        )
+        
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return await self.run(*args, **kwargs)
+
 
 class ScheduledWorkflowRunner(Runner):
     def _build_specs(
@@ -176,3 +233,4 @@ class ScheduledWorkflowRunner(Runner):
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return await self.run(**kwargs)
+    

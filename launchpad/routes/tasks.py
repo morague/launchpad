@@ -21,10 +21,10 @@ async def ls_deployments(request: Request):
 @protected("user")
 async def deploy(request: Request, name: str):
     dplmt = request.app.ctx.deployments.get(name, None)
-    print(dplmt)
     if dplmt is None:
         raise ValueError()
     
+    background = dplmt.get("background_task", False)
     deploy = copy.deepcopy(dplmt)
     workflow = deploy.get("workflow")
     runner = request.app.ctx.runners.get(deploy.get("runner"), None)
@@ -40,6 +40,11 @@ async def deploy(request: Request, name: str):
     if workflow["workflow"] is None:
         raise ValueError()
     print(deploy)
-    await runner()(**workflow)
+    
+    if background:
+        request.app.purge_tasks()
+        request.app.add_task(runner()(**workflow), name=name)
+    else:
+        await runner()(**workflow)
     return json({"status":200, "reasons": "OK", "data":{"deployed": name}},status=200)
 

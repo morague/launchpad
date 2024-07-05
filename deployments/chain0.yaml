@@ -1,15 +1,26 @@
-# -- WORKFLOW RUNNER TEST + TASK WORKFLOW
-name: test
+# -- WORKFLOW RUNNER TEST + TASK CHAINWORKFLOW
+name: chain0
 runner: WorkflowRunner
 client_address: localhost:7233
 workflow:
-  workflow: Task
-  workflow_id: cute_id
+  workflow: ChainedTask
+  workflow_id: chained_task_0
   task_queue: default
   workflow_kwargs:
     activity: appfile
     args: 
-      - ROMAIN
+      - CHAINED_ROMAIN_0
+
+    chain:
+      handle:
+        workflow: PollingWorkflowDeployer
+        workflow_id: dispatcher
+      signal:
+        signal: queue
+        signal_args: 
+          - "./deployments/chain1.yaml"
+      # chain_conditions:
+
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON

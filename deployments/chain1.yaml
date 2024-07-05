@@ -1,0 +1,34 @@
+# -- WORKFLOW RUNNER TEST + TASK CHAINWORKFLOW
+name: chain1
+runner: WorkflowRunnerWithStartSignal
+client_address: localhost:7233
+workflow:
+  workflow: ChainedTask
+  workflow_id: chained_task_1
+  task_queue: default
+  workflow_kwargs:
+    activity: appfile
+    args: 
+      - CHAINED_ROMAIN_1
+
+    # chain:
+    #   handle:
+    #     workflow: ChainedTask
+    #     workflow_id: chained_task_1
+    #   signal:
+    #     signal: trigger
+    #     signal_args: 
+    #       - start
+      # chain_conditions:
+
+    start_to_close_timeout:
+      seconds: 5
+    cancellation_type: ABANDON
+    retry_policy:
+      backoff_coefficient: 2.0
+      initial_interval:
+        seconds: 5
+      maximum_attempts: 5
+      non_retryable_error_types:
+        - ValueError
+        - KeyError

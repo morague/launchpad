@@ -1,15 +1,15 @@
-# -- WORKFLOW RUNNER TEST + TASK WORKFLOW
-name: test
-runner: WorkflowRunner
+## -- TEMP WORKER RUNNER TEST + TASK WORKFLOW
+name: test2
+runner: WorkflowRunnerWithTempWorker
 client_address: localhost:7233
 workflow:
   workflow: Task
   workflow_id: cute_id
-  task_queue: default
+  task_queue: temporary_worker
   workflow_kwargs:
     activity: appfile
     args: 
-      - ROMAIN
+      - TEMP_ROMAIN
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON

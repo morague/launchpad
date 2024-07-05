@@ -1,10 +1,10 @@
-# -- WORKFLOW RUNNER TEST + TASK WORKFLOW
-name: test
+name: dispatcher
 runner: WorkflowRunner
 client_address: localhost:7233
+background_task: True
 workflow:
-  workflow: Task
-  workflow_id: cute_id
+  workflow: PollingWorkflowDeployer
+  workflow_id: dispatcher
   task_queue: default
   workflow_kwargs:
     activity: appfile
