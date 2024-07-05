@@ -16,7 +16,8 @@ schedulesbp = Blueprint("schedulesbp", url_prefix="/schedules")
 @schedulesbp.get("/")
 @protected("user")
 async def get_schedules(request: Request):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     infos = []
     async for schedule in await client.list_schedules():
         infos.append(schedule.info)
@@ -26,7 +27,8 @@ async def get_schedules(request: Request):
 @schedulesbp.post("/info/<scheduler_id:str>")
 @protected("user")
 async def schedule_infos(request: Request, scheduler_id: str):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     desc = await handle.describe()
     # not serialisable
@@ -35,7 +37,8 @@ async def schedule_infos(request: Request, scheduler_id: str):
 @schedulesbp.get("/restart/<scheduler_id:str>")
 @protected("user")
 async def start_schedule(request: Request, scheduler_id: str):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,) 
     await handle.unpause()  
     return json({"status":200, "reasons": "OK", "data": {scheduler_id: "restarted"}}, status=200)
@@ -43,7 +46,8 @@ async def start_schedule(request: Request, scheduler_id: str):
 @schedulesbp.get("/pause/<scheduler_id:str>")
 @protected("user")
 async def pause_schedule(request: Request, scheduler_id: str):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     await handle.pause()  
     return json({"status":200, "reasons": "OK", "data": {scheduler_id: "paused"}}, status=200)
@@ -51,7 +55,8 @@ async def pause_schedule(request: Request, scheduler_id: str):
 @schedulesbp.get("/trigger/<scheduler_id:str>")
 @protected("user")
 async def trigger_schedule(request: Request, scheduler_id: str):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     await handle.trigger()
     return json({"status":200, "reasons": "OK", "data": {scheduler_id: "triggered"}}, status=200)
@@ -59,7 +64,8 @@ async def trigger_schedule(request: Request, scheduler_id: str):
 @schedulesbp.get("/delete/<scheduler_id:str>")
 @protected("user")
 async def delete_schedule(request: Request, scheduler_id: str):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     await handle.delete()    
     return json({"status":200, "reasons": "OK", "data": {scheduler_id: "deleted"}}, status=200)
@@ -67,6 +73,7 @@ async def delete_schedule(request: Request, scheduler_id: str):
 @schedulesbp.post("/update/<scheduler_id:str>")
 @protected("user")
 async def update_schedule(request: Request, scheduler_id: str):
-    client = await Client.connect("localhost:7233")
+    server = request.app.config.TEMPORAL_CLIENT_ADDRESS
+    client = await Client.connect(server)
     return empty()
 

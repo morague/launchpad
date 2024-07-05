@@ -74,3 +74,12 @@ app:
         level: INFO
         handlers: [stream, error_file, access_file]
         propagate: False
+      workflows:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
+      workers:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
+  

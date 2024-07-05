@@ -17,4 +17,5 @@ async def favicon(request: Request):
 @basebp.get("/temporal")
 @protected("user")
 async def get_temporal_ui(request: Request):
-    return redirect("http://localhost:8233")
+    gui = request.app.config.TEMPORAL_GUI_ADDRESS
+    return redirect(f"http://{gui}")

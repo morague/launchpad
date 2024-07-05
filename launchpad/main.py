@@ -74,6 +74,7 @@ class Launchpad(object):
         self.app.on_request(go_fast, priority=100)
         self.app.on_request(cookie_token, priority=99)
         self.app.on_response(log_exit, priority=100)
+
         
         # -- WATCHER
         modules = watcher.get("modules", {})

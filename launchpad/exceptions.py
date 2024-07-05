@@ -5,6 +5,9 @@ class LaunchpadException(SanicException):
     pass
 
 
+class NotImplemented(LaunchpadException):
+    pass
+
 # -- AUTHENTICATOR ERRORS
 class OutatedAuthorizationToken(LaunchpadException):
     pass

@@ -45,7 +45,7 @@ def log_group_visit(f):
         if total_changes == 0:
             return changes
         else:
-            logger.info(f"> Visiting {self.name}: {str(total_changes)} changes found.")
+            logger.info(f"> Visiting {self.name} group: {str(total_changes)} changes found.")
         for k,v in changes.items():
             if len(v) == 0:
                 continue
@@ -59,7 +59,6 @@ def log_group_visit(f):
 def log_watcher_visit(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        self: Group = args[0]
         changes = f(*args, **kwargs)
         total_changes = len(aggregate(changes))
         if total_changes == 0:
@@ -508,7 +507,7 @@ class LaunchpadWatcher(Watcher):
             objects = self.temporal_objects()
             self.inject("workflows", "runners", "workers", objects=objects)
         except Exception:
-            logger.info("Modules Update failed...")
+            logger.warning("Modules Update failed...")
             return
         app.ctx.activities = activities
         app.ctx.workflows = workflows
