@@ -3,8 +3,8 @@ client_address: "localhost:7233"
 task_queue: default
 workflows:
   - Task
-  - ChainedTask
-  - PollingWorkflowDeployer
+  - TaskDispatcher
+  - AwaitedTask
 activities:
   - appfile
 max_workers: 100
