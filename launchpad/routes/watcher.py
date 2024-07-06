@@ -112,7 +112,7 @@ async def visit_group(request: Request, group: str):
 async def refresh_all(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     watcher.visit()
-    watcher.update_app(request.app)
+    await watcher.update_app(request.app)
     return json({"status":200, "reasons": "OK"}, status=200)
 
     

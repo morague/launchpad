@@ -20,31 +20,25 @@ async def ls_deployments(request: Request):
 @tasksbp.get("/deploy/<name:str>")
 @protected("user")
 async def deploy(request: Request, name: str):
-    dplmt = request.app.ctx.deployments.get(name, None)
-    if dplmt is None:
-        raise ValueError()
+    deployment = copy.deepcopy(request.app.ctx.deployments.get(name, None))
+    if deployment is None:
+        raise KeyError()
+
+    runner_name = deployment.get("runner", None)
+    runner_class = request.app.ctx.runners.get(runner_name, None)
     
-    background = dplmt.get("background_task", False)
-    deploy = copy.deepcopy(dplmt)
-    workflow = deploy.get("workflow")
-    runner = request.app.ctx.runners.get(deploy.get("runner"), None)
-    workflow["workflow"] = request.app.ctx.workflows.get(workflow["workflow"], None)
-    
-    scheduler = deploy.pop("schedule", None)
-    if scheduler is not None:
-        workflow.update(scheduler)
-    
-    if runner is None:
-        raise ValueError()
-    
-    if workflow["workflow"] is None:
-        raise ValueError()
-    print(deploy)
-    
-    if background:
-        request.app.purge_tasks()
-        request.app.add_task(runner()(**workflow), name=name)
+    if runner_name is None or runner_class is None:
+        raise KeyError()
+
+    workflow_payload = deployment.get("workflow")
+    workflow_name = workflow_payload.get("workflow", None)
+    workflow_class = request.app.ctx.workflows.get(workflow_name, None)
+    if workflow_name is None or workflow_class is None:
+        raise KeyError()
     else:
-        await runner()(**workflow)
+        workflow_payload["workflow"] = workflow_class
+    
+    print(workflow_payload)
+    await runner_class()(**workflow_payload)
     return json({"status":200, "reasons": "OK", "data":{"deployed": name}},status=200)
 
