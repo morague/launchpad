@@ -1,0 +1,82 @@
+name: #str : deployment name
+runner: WorkflowRunner # str. Runner class name
+client_address: localhost:7233 #str . default localhost:7233 is temporal client default port
+workflow:
+  task_queue: #str . Worker queue to be used by the runner.
+  workflow_id: #str . Your workflow ID.
+  workflow: # Task | TaskDispatcher | AwaitedTask
+  workflow_kwargs: # TEMPLATE: Task | TaskDispatcher | AwaitedTask
+
+  id_reuse_policy: #Optional[str] . temporalio.common.WorkflowIDReusePolicy. when use specify policy name as STR. the runner will retrieve the pyhton object
+  cron_schedule: # Optional[str]
+  request_eager_start: # Optional[bool] . default = False
+  start_signal: # Optional[str] . Workflow signal name as STR
+  start_signal_args: # Optional[list[Any]]
+
+  retry_policy: #Optional[dict[str, Any]]
+    backoff_coefficient: #float = 2.0
+    initial_interval: # Optional[timedelta]
+      milliseconds: #Optional[int]
+      microseconds: #Optional[int]
+      seconds: #Optional[int]
+      minutes: #Optional[int]
+      hours: #Optional[int]
+      days: #Optional[int]
+      weeks: #Optional[int]
+    maximum_attempts: #int 0= no maximum
+    maximum_interval: # Optional[timedelta]
+      milliseconds: #Optional[int]
+      microseconds: #Optional[int]
+      seconds: #Optional[int]
+      minutes: #Optional[int]
+      hours: #Optional[int]
+      days: #Optional[int]
+      weeks: #Optional[int]
+    non_retryable_error_types: #Optional[list[str]] error_names as str
+
+
+  execution_timeout: # Optional[timedelta]
+    milliseconds: #Optional[int]
+    microseconds: #Optional[int]
+    seconds: #Optional[int]
+    minutes: #Optional[int]
+    hours: #Optional[int]
+    days: #Optional[int]
+    weeks: #Optional[int]
+  run_timeout: # Optional[timedelta]
+    milliseconds: #Optional[int]
+    microseconds: #Optional[int]
+    seconds: #Optional[int]
+    minutes: #Optional[int]
+    hours: #Optional[int]
+    days: #Optional[int]
+    weeks: #Optional[int]
+  task_timeout: # Optional[timedelta]
+    milliseconds: #Optional[int]
+    microseconds: #Optional[int]
+    seconds: #Optional[int]
+    minutes: #Optional[int]
+    hours: #Optional[int]
+    days: #Optional[int]
+    weeks: #Optional[int]
+  rpc_timeout: # Optional[timedelta]
+    milliseconds: #Optional[int]
+    microseconds: #Optional[int]
+    seconds: #Optional[int]
+    minutes: #Optional[int]
+    hours: #Optional[int]
+    days: #Optional[int]
+    weeks: #Optional[int]
+
+  start_delay: # Optional[timedelta]
+    milliseconds: #Optional[int]
+    microseconds: #Optional[int]
+    seconds: #Optional[int]
+    minutes: #Optional[int]
+    hours: #Optional[int]
+    days: #Optional[int]
+    weeks: #Optional[int]
+
+  memo: # Optional[dict[str, Any]]
+  rpc_metadata: # Optional[dict[str, str]]
+  search_attributes: # TypedSearchAttributes | SearchAttributes | None = None Not Implented.
