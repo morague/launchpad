@@ -1,31 +1,15 @@
-# -- WORKFLOW RUNNER TEST + TASK CHAINWORKFLOW
-name: chain1
-runner: WorkflowRunner
+# -- WORKFLOW RUNNER WITH TEMPWORKER TEST + TASK WORKFLOW
+name: test5
+runner: ScheduledWorkflowRunner
 client_address: localhost:7233
 workflow:
   workflow: Task
-  workflow_id: chained_task_1
+  workflow_id: test5_scheduled_workflow_id
   task_queue: default
   workflow_kwargs:
     activity: appfile
     args: 
-      - CHAINED_ROMAIN_1
-
-    chain_with:
-      - handle:
-          workflow: AwaitedTask
-          workflow_id: awaited_task_id
-        signal:
-          signal: start
-          signal_args: 
-      - handle:
-          workflow: TaskDispatcher
-          workflow_id: dispatcher
-        signal:
-          signal: queue
-          signal_args: 
-            - "./deployments/test3.yaml"
-
+      - SCHEDULED_ROMAIN
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON
@@ -37,16 +21,19 @@ workflow:
       non_retryable_error_types:
         - ValueError
         - KeyError
-  
+
+  scheduler_id: test5_scheduler_id
+  intervals:
+    - every:
+        seconds: 10
+
   retry_policy:
     backoff_coefficient: 2.0 
     initial_interval: 
       seconds: 5
-
     maximum_attempts: 5
     maximum_interval:
       seconds: 5
-
     non_retryable_error_types:
       - ValueError
       - KeyError

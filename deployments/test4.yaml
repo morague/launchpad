@@ -1,31 +1,15 @@
-# -- WORKFLOW RUNNER TEST + TASK CHAINWORKFLOW
-name: chain1
-runner: WorkflowRunner
+# -- WORKFLOW RUNNER WITH TEMPWORKER TEST + TASK WORKFLOW
+name: test4
+runner: WorkflowRunnerWithTempWorker
 client_address: localhost:7233
 workflow:
   workflow: Task
-  workflow_id: chained_task_1
-  task_queue: default
+  workflow_id: test4_workflow_id
+  task_queue: temp_default
   workflow_kwargs:
     activity: appfile
     args: 
-      - CHAINED_ROMAIN_1
-
-    chain_with:
-      - handle:
-          workflow: AwaitedTask
-          workflow_id: awaited_task_id
-        signal:
-          signal: start
-          signal_args: 
-      - handle:
-          workflow: TaskDispatcher
-          workflow_id: dispatcher
-        signal:
-          signal: queue
-          signal_args: 
-            - "./deployments/test3.yaml"
-
+      - TEMP_WORKER_ROMAIN
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON

@@ -3,7 +3,7 @@ name: chain0
 runner: WorkflowRunner
 client_address: localhost:7233
 workflow:
-  workflow: ChainedTask
+  workflow: Task
   workflow_id: chained_task_0
   task_queue: default
   workflow_kwargs:
@@ -11,15 +11,14 @@ workflow:
     args: 
       - CHAINED_ROMAIN_0
 
-    chain:
-      handle:
-        workflow: PollingWorkflowDeployer
-        workflow_id: dispatcher
-      signal:
-        signal: queue
-        signal_args: 
-          - "./deployments/chain1.yaml"
-      # chain_conditions:
+    chain_with:
+      - handle:
+          workflow: TaskDispatcher
+          workflow_id: dispatcher
+        signal:
+          signal: queue
+          signal_args: 
+            - "./deployments/test3.yaml"
 
     start_to_close_timeout:
       seconds: 5
@@ -32,3 +31,18 @@ workflow:
       non_retryable_error_types:
         - ValueError
         - KeyError
+  
+  retry_policy:
+    backoff_coefficient: 2.0 
+    initial_interval: 
+      seconds: 5
+
+    maximum_attempts: 5
+    maximum_interval:
+      seconds: 5
+
+    non_retryable_error_types:
+      - ValueError
+      - KeyError
+  memo: 
+    test: "this is a test"
