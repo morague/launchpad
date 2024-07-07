@@ -20,7 +20,7 @@ from launchpad.routes.base import basebp
 from launchpad.routes.login import loginbp
 
 from launchpad.routes.errors_handler import error_handler
-from launchpad.listeners import start_watcher
+from launchpad.listeners import start_watcher, on_start_deployments
 from launchpad.middlewares import go_fast, log_exit, cookie_token
 
 """
@@ -114,19 +114,24 @@ class Launchpad(object):
             self.app.ctx.authenticator = None
         
         # -- TEMPORAL IO SERVER
-        if temporalio is None:
-            self.app.ctx.temporal_server = None
+        if temporalio is None or temporalio.get("external_server", True):
             Warning("Make sure TemporalIO is running on another Process")
-        else:
-            pass # start server
+            temporal = TemporalServerManager.simple_manager()
+            self.app.ctx.temporal = temporal
+        elif temporalio.get("external_server", True) is False:
+            temporal = TemporalServerManager.run()
+            self.app.ctx.temporal = temporal
         
+        if temporalio is not None and temporalio.get("deploy_tasks_on_server_start", False):
+            self.app.register_listener(on_start_deployments, "after_server_start")
+            
         # -- TEMPORAL WORKERS
         if deployments_workers_settings is None:
             self.app.ctx.workers = WorkersManager()
             Warning("Make sure Some workers are running and binded to your workflows & activities")
         else:
             self.app.ctx.workers = WorkersManager.initialize(*[v for v in deployments_workers_settings.values()])
-                
+        
     @classmethod
     def create_app(cls) -> Launchpad:
         configs = get_config(os.environ.get("CONFIG_FILEPATH", "./configs/configs.yaml"))
@@ -141,4 +146,4 @@ class Launchpad(object):
     def print_banner(self):
         print(BANNER)
         print(f"Booting {self.env} env")
-        
+    

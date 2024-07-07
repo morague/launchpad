@@ -442,7 +442,8 @@ class LaunchpadWatcher(Watcher):
         "workflows": ["./launchpad/workflows.py"],
         "workers": ["./launchpad/workers.py"],
         "runners": ["./launchpad/runners.py"],
-        "routes": ["./launchpad/routes"]
+        "routes": ["./launchpad/routes"],
+        "temporal": ["./launchpad/temporal_server.py"]
     }
     
     def __init__(self, *paths: str | Path,  **groups: Group) -> None:
@@ -505,7 +506,7 @@ class LaunchpadWatcher(Watcher):
             
             self.reload()
             objects = self.temporal_objects()
-            self.inject("workflows", "runners", "workers", objects=objects)
+            self.inject("workflows", "runners", "workers", "temporal", objects=objects)
         except Exception:
             logger.warning("Modules Update failed...")
             return

@@ -41,7 +41,7 @@ async def start_schedule(request: Request, scheduler_id: str):
     client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,) 
     await handle.unpause()  
-    return json({"status":200, "reasons": "OK", "data": {scheduler_id: "restarted"}}, status=200)
+    return json({"status":200, "reasons": "OK", "data": {"restarted":scheduler_id}}, status=200)
 
 @schedulesbp.get("/pause/<scheduler_id:str>")
 @protected("user")
@@ -50,7 +50,7 @@ async def pause_schedule(request: Request, scheduler_id: str):
     client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     await handle.pause()  
-    return json({"status":200, "reasons": "OK", "data": {scheduler_id: "paused"}}, status=200)
+    return json({"status":200, "reasons": "OK", "data": {"paused":scheduler_id}}, status=200)
 
 @schedulesbp.get("/trigger/<scheduler_id:str>")
 @protected("user")
@@ -59,7 +59,7 @@ async def trigger_schedule(request: Request, scheduler_id: str):
     client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     await handle.trigger()
-    return json({"status":200, "reasons": "OK", "data": {scheduler_id: "triggered"}}, status=200)
+    return json({"status":200, "reasons": "OK", "data": {"triggered":scheduler_id}}, status=200)
 
 @schedulesbp.get("/delete/<scheduler_id:str>")
 @protected("user")
@@ -68,7 +68,7 @@ async def delete_schedule(request: Request, scheduler_id: str):
     client = await Client.connect(server)
     handle = client.get_schedule_handle(scheduler_id,)
     await handle.delete()    
-    return json({"status":200, "reasons": "OK", "data": {scheduler_id: "deleted"}}, status=200)
+    return json({"status":200, "reasons": "OK", "data": {"deleted":scheduler_id}}, status=200)
 
 @schedulesbp.post("/update/<scheduler_id:str>")
 @protected("user")
