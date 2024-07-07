@@ -1,6 +1,7 @@
 name: dispatcher
 runner: WorkflowRunner
 client_address: localhost:7233
+deploy_on_server_start: True
 workflow:
   workflow: TaskDispatcher
   workflow_id: dispatcher

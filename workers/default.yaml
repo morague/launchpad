@@ -5,6 +5,8 @@ workflows:
   - Task
   - TaskDispatcher
   - AwaitedTask
+  - BatchTask
+  - AwaitedBatchTask
 activities:
   - appfile
 max_workers: 100

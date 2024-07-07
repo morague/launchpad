@@ -76,6 +76,19 @@ class BaseWorkflow(ABC):
             handle = workflow.get_external_workflow_handle_for(workflow_class.run, workflow_id)
             await handle.signal(signal, args=signal_args)
 
+    async def handle_at_start(self, kwargs: dict[str, Any]) -> None:
+        at_start = kwargs.get("at_start", None)
+        if at_start is None:
+            return
+        await self.chain(at_start)
+    
+    async def handle_at_end(self, kwargs: dict[str, Any]) -> None:
+        at_end = kwargs.get("at_end", None)
+        if at_end is None:
+            return
+        await self.chain(at_end)
+        if at_end.get("renew", False):
+            workflow.continue_as_new(kwargs)
 
     async def run(self, kwargs: dict[str, Any]):
         raise NotImplemented()
@@ -97,10 +110,12 @@ class Task(BaseWorkflow):
             raise KeyError("define an activity")
         if activity is None:
             raise ValueError("you must refresh your modules")
-
+        
+        await self.handle_at_start(kwargs)
         logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
         await workflow.execute_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
-        await self.chain(kwargs)
+        await self.handle_at_end(kwargs)
+        # await self.chain(kwargs)
         
 @workflow.defn(sandboxed=False)  
 class TaskDispatcher(BaseWorkflow):
@@ -188,10 +203,80 @@ class AwaitedTask(BaseWorkflow):
         
         if activity is None:
             raise ValueError("you must refresh your modules")
-
+        
+        await self.handle_at_start(kwargs)
         logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
         await workflow.execute_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
-        await self.chain(kwargs)
+        await self.handle_at_end(kwargs)
         
-        if kwargs.get("renew_at_workflow_end", False):
-            workflow.continue_as_new(kwargs)
+  
+@workflow.defn(sandboxed=False)            
+class BatchTask(BaseWorkflow):
+    @workflow.run
+    async def run(self, kwargs: dict[str, Any]) -> None:
+        activities = kwargs.get("batch", None)
+        if activities is None:
+            raise KeyError()
+        
+        await self.handle_at_start(kwargs)
+        for batch in activities:
+            activity_name = batch.get("activity", None)
+            activity = getattr(sys.modules[__name__], activity_name, None)
+            retry_policy = self.parse_retry_policy(batch)
+            cancellation_type = self.define_cancelation_type(batch)
+            timeouts = self.parse_timeouts(batch)
+            args = batch.get("args", [])
+            
+            if activity_name is None:
+                raise KeyError("define an activity")
+            
+            if activity is None:
+                raise ValueError("you must refresh your modules")
+            
+            logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
+            await workflow.start_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
+        await self.handle_at_end(kwargs)
+        
+@workflow.defn(sandboxed=False)            
+class AwaitedBatchTask(BaseWorkflow):
+    def __init__(self) -> None:
+        self._start = False
+        self._exit = False
+
+    @workflow.signal(name="exit")
+    async def exit(self) -> None:
+        self._exit = True
+
+    @workflow.signal(name="start")
+    async def start(self):
+        self._start = True
+        
+    @workflow.run
+    async def run(self, kwargs: dict[str, Any]) -> None:
+        await workflow.wait_condition(lambda: self._start or self._exit)
+        
+        if self._exit:
+            return        
+
+        activities = kwargs.get("batch", None)
+        if activities is None:
+            raise KeyError()
+        
+        await self.handle_at_start(kwargs)
+        for batch in activities:
+            activity_name = batch.get("activity", None)
+            activity = getattr(sys.modules[__name__], activity_name, None)
+            retry_policy = self.parse_retry_policy(batch)
+            cancellation_type = self.define_cancelation_type(batch)
+            timeouts = self.parse_timeouts(batch)
+            args = batch.get("args", [])
+            
+            if activity_name is None:
+                raise KeyError("define an activity")
+            
+            if activity is None:
+                raise ValueError("you must refresh your modules")
+            
+            logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
+            await workflow.start_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
+        await self.handle_at_end(kwargs)

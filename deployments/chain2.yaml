@@ -1,25 +1,23 @@
-# -- WORKFLOW RUNNER TEST + TASK CHAINWORKFLOW
-name: chain0
+name: chain2
 runner: WorkflowRunner
 client_address: localhost:7233
 workflow:
   workflow: Task
-  workflow_id: chained_task_0
+  workflow_id: chained_task_2
   task_queue: default
   workflow_kwargs:
     activity: appfile
     args: 
-      - CHAINED_ROMAIN_0
+      - CHAINED_ROMAIN_2
 
     at_end:
       chain_with:
         - handle:
-            workflow: TaskDispatcher
-            workflow_id: dispatcher
+            workflow: AwaitedBatchTask
+            workflow_id: awaitedbatch0_workflow_id
           signal:
-            signal: queue
+            signal: start
             signal_args: 
-              - "./deployments/test3.yaml"
 
     start_to_close_timeout:
       seconds: 5

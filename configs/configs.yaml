@@ -6,6 +6,10 @@ app:
       temporal_gui_address: "localhost:8233"
       secret: "xxxxxxx"
 
+  temporalio:
+    external_server: True
+    deploy_tasks_on_server_start: True
+
   watcher:
     modules:
       workers:

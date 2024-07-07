@@ -11,20 +11,21 @@ workflow:
     args: 
       - CHAINED_ROMAIN_1
 
-    chain_with:
-      - handle:
-          workflow: AwaitedTask
-          workflow_id: awaited_task_id
-        signal:
-          signal: start
-          signal_args: 
-      - handle:
-          workflow: TaskDispatcher
-          workflow_id: dispatcher
-        signal:
-          signal: queue
-          signal_args: 
-            - "./deployments/test3.yaml"
+    at_end:
+      chain_with:
+        - handle:
+            workflow: AwaitedTask
+            workflow_id: awaited_task_id
+          signal:
+            signal: start
+            signal_args: 
+        - handle:
+            workflow: TaskDispatcher
+            workflow_id: dispatcher
+          signal:
+            signal: queue
+            signal_args: 
+              - "./deployments/test3.yaml"
 
     start_to_close_timeout:
       seconds: 5
