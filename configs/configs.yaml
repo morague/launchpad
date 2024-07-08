@@ -86,4 +86,7 @@ app:
         level: INFO
         handlers: [stream, error_file, access_file]
         propagate: False
-  
+      temporal:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False

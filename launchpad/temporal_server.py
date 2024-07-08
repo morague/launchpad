@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import logging
 import subprocess
 import signal
 import copy
@@ -7,7 +8,11 @@ from sanic import Sanic
 from multiprocessing import Process
 from attrs import define, field
 
+from temporalio.exceptions import WorkflowAlreadyStartedError
+
 from typing import Any
+
+logger = logging.getLogger("temporal")
 
 @define(slots=True)
 class TemporalServerManager:
@@ -62,4 +67,7 @@ class TemporalServerManager:
         for task_name, settings in deployments_settings.items():
             deployable = settings.get("deploy_on_server_start", False)
             if deployable:
-                await self.deploy(app, task_name)
+                try:
+                    await self.deploy(app, task_name)
+                except WorkflowAlreadyStartedError:
+                    logger.warning(f"[Task: {task_name}] is already running.")
