@@ -1,10 +1,11 @@
 from __future__ import annotations
 import sys
 import time
-
+import logging
 from abc import ABC
 import asyncio
 import concurrent.futures
+from functools import wraps
 from multiprocessing import Process
 from attrs import define, field
 from temporalio.client import Client
@@ -15,6 +16,16 @@ from typing import Callable, Any
 
 
 QueueName = str
+
+logger = logging.getLogger("workers")
+
+def log(f: Callable) -> Callable:
+    @wraps(f)
+    def wrapper(*args, **kwargs) -> Any:
+        logger.info(f"[{f.__name__}][args: {args}][kwargs: {kwargs}]")
+        return f(*args, **kwargs)
+    return wrapper
+    
 
 class LaunchpadWorker(ABC):
     def run(self):
@@ -28,11 +39,10 @@ class AsyncWorker(LaunchpadWorker):
     workflows: list[Callable] = field(default=[])
     activities: list[Callable] = field(default=[])
     max_workers: int = field(default=100)
-        
+    
     async def _async_threadpool_workers(self):
         client = await Client.connect(self.client_address)
         
-        # workflows, activities = self.load()
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as activity_executor:
             worker = Worker(
             client,
@@ -40,9 +50,6 @@ class AsyncWorker(LaunchpadWorker):
             workflows=self.workflows, 
             activities=self.activities,
             activity_executor=activity_executor,
-            # workflow_runner=SandboxedWorkflowRunner(
-            #     restrictions=SandboxRestrictions.default.with_passthrough_modules()
-            # )
             )
             await worker.run()
 
@@ -69,15 +76,16 @@ class WorkersManager:
     def as_main(cls, settings: dict[str, Any]= {}):
         worker = AsyncWorker(**settings)
         worker.run()
-        
+    
+    @log
     def add_worker(self, **settings):
-        print(settings)
         worker = self._build_worker(settings)
         process = Process(target= worker.run)
         process.start()
         self.__workers[worker.task_queue] = ((worker, process))
         return (worker, process)
-        
+    
+    @log
     def kill_worker(self, task_queue: QueueName):
         worker, process = self.__workers.get(task_queue, ((None, None)))
         if worker is None:

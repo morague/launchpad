@@ -8,15 +8,22 @@ from pathlib import Path
 from datetime import timedelta
 from temporalio import workflow
 from temporalio.client import WorkflowFailureError
-from temporalio.workflow import ActivityCancellationType
+from temporalio.workflow import ActivityCancellationType, VersioningIntent, ParentClosePolicy
 from temporalio.common import RetryPolicy
 
+from typing import Any, Coroutine, Callable
 
-
-from typing import Any, Coroutine
-
-from launchpad.parsers import parse_yaml
 from launchpad.exceptions import NotImplemented
+from launchpad.parsers import parse_yaml
+from launchpad.utils import (
+    parse_timeouts,
+    parse_retry_policy,
+    define_cancelation_type,
+    define_parent_close_policy,
+    define_versioning_intent,
+    define_search_attributes,
+    define_id_reuse_policy
+)
 
 logger = logging.getLogger("workflows")
 
@@ -25,36 +32,64 @@ StrOrPath= str | Path
 Payload = dict[str, Any]
 
 
-class BaseWorkflow(ABC):    
-    def define_cancelation_type(self, kwargs: dict[str, Any]) -> ActivityCancellationType:
-        from temporalio.workflow import ActivityCancellationType
+class BaseWorkflow(ABC):
+    def parse_activity(self, kwargs: dict[str, Any]) -> tuple[Callable, list[Any], dict[str, Any]]:
+        activity_name = kwargs.get("activity", None)
+        if activity_name is None:
+            raise KeyError("define an activity")
         
-        cancellation_type = kwargs.get("cancellation_type", None)
-        if cancellation_type is None:
-            return ActivityCancellationType.TRY_CANCEL
-        return getattr(ActivityCancellationType, cancellation_type)
-    
-    def parse_retry_policy(self, kwargs: dict[str, Any]) -> RetryPolicy | None:
-        retry_policy = copy.deepcopy(kwargs.get("retry_policy", None))
-        if retry_policy is None:
-            return None
+        activity = getattr(sys.modules[__name__], activity_name, None)
+        if activity is None:
+            raise ValueError("you must refresh your modules")        
+                
+        arguments = kwargs.get("args", [])
+        key_arguments = {
+            "activity_id": kwargs.get("activity_id", None),
+            "task_queue": kwargs.get("task_queue", None),
+            "retry_policy": parse_retry_policy(kwargs),
+            "cancellation_type": define_cancelation_type(kwargs),
+            "versioning_intent": define_versioning_intent(kwargs)
+        }
+        key_arguments.update(parse_timeouts(kwargs))
+        return (activity, arguments, key_arguments)
+
+    def parse_child_workflows_settings(
+        self,
+        settings: StrOrPath|Payload,
+        global_parameters: dict[str, Any]
+        ) -> tuple[Callable, dict[str, Any], dict[str, Any]]:
+        if not isinstance(settings, dict) and os.path.exists(settings) is False:
+            raise ValueError()
+        elif not isinstance(settings, dict):
+            settings = parse_yaml(settings)
+        workflow_payload: dict = settings.get("workflow", None)
+
+        if workflow_payload is None:
+            KeyError()
         
-        initial_interval = retry_policy.get("initial_interval", None)
-        maximum_interval = retry_policy.get("maximum_interval", None)
+        workflow_name = workflow_payload.get("workflow", None)
+        if workflow_name is None:
+            raise KeyError()
         
-        if initial_interval is not None:
-            retry_policy["initial_interval"] = timedelta(**initial_interval)
-        if maximum_interval is not None:
-            retry_policy["maximum_interval"] = timedelta(**maximum_interval)
-        return RetryPolicy(**retry_policy)
-    
-    def parse_timeouts(self, kwargs: dict[str, Any]) -> dict[str, timedelta]:
-        timeouts = {}
-        for k,v in kwargs.items():
-            if k.endswith("_timeout"):
-                timeouts.update({k:timedelta(**v)})
-        return timeouts
-    
+        workflow_class = getattr(sys.modules[__name__], workflow_name, None)
+        if workflow_class is None:
+            raise KeyError()
+        
+        workflow_kwargs = workflow_payload.get("workflow_kwargs", None)
+        key_arguments = {
+            "task_queue": workflow_payload.get("task_queue", None),
+            "cancellation_type": define_cancelation_type(global_parameters),
+            "parent_close_policy": define_parent_close_policy(global_parameters),
+            "id_reuse_policy": define_id_reuse_policy(workflow_payload),
+            "retry_policy": parse_retry_policy(workflow_payload),
+            "cron_schedule": workflow_payload.get("cron_schedule", ""),
+            "memo": workflow_payload.get("memo", None),
+            "search_attributes": define_search_attributes(workflow_payload),
+            "versioning_intent": define_versioning_intent(global_parameters)
+        }
+        key_arguments.update(parse_timeouts(workflow_payload))
+        return (workflow_class, workflow_kwargs, key_arguments)        
+
     async def chain(self, kwargs: dict[str, Any]) -> Coroutine[Any, Any, None] | None:
         chain = kwargs.get("chain_with", None)
         if chain is None:
@@ -98,24 +133,13 @@ class BaseWorkflow(ABC):
 class Task(BaseWorkflow):
     @workflow.run
     async def run(self, kwargs: dict[str, Any]):
-        activity_name = kwargs.pop("activity", None)
-
-        activity = getattr(sys.modules[__name__], activity_name, None)
-        retry_policy = self.parse_retry_policy(kwargs)
-        cancellation_type = self.define_cancelation_type(kwargs)
-        timeouts = self.parse_timeouts(kwargs)
-        args = kwargs.pop("args", [])
-        
-        if activity_name is None:
-            raise KeyError("define an activity")
-        if activity is None:
-            raise ValueError("you must refresh your modules")
+        activity_name = kwargs.get("activity", None)
+        activity, arguments, key_arguments = self.parse_activity(kwargs)
         
         await self.handle_at_start(kwargs)
-        logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
-        await workflow.execute_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
+        logger.info(f"[workflow: {self.__class__.__name__}][activity: {activity_name}][args: {arguments}] Starting activity")
+        await workflow.execute_activity(activity, *arguments, **key_arguments)
         await self.handle_at_end(kwargs)
-        # await self.chain(kwargs)
         
 @workflow.defn(sandboxed=False)  
 class TaskDispatcher(BaseWorkflow):
@@ -134,41 +158,22 @@ class TaskDispatcher(BaseWorkflow):
     @workflow.run
     async def run(self, kwargs: dict[str, Any]) -> None:
         while True:
-            await workflow.wait_condition(self._polling_condition)
+            await workflow.wait_condition(self.polling_condition)
             
             while not self._queue.empty():
-                deployment_path = self._queue.get_nowait()
-                workflow_class, workflow_kwargs, workflow_id, task_queue = self._prepare_workflow_deployment(deployment_path)
-                await workflow.start_child_workflow(workflow_class, workflow_kwargs, id=workflow_id, task_queue=task_queue)
+                settings = self._queue.get_nowait()
+                workflow_class, workflow_kwargs, key_arguments = self.parse_child_workflows_settings(settings, kwargs)
+                activity_name = workflow_kwargs.get("activity", None)
+                args = workflow_kwargs.get("args", None)
+                logger.info(f"[workflow: {self.__class__.__name__}][child workflow: {workflow_class.__name__}][activity: {activity_name}][args: {args}] Starting Child Workflow")
+                await workflow.start_child_workflow(workflow_class, workflow_kwargs, **key_arguments)
 
             if self._exit:
                 return 
             
-    def _polling_condition(self) -> bool:
+    def polling_condition(self) -> bool:
         return not self._queue.empty() or self._exit
     
-    def _prepare_workflow_deployment(self, deployment:StrOrPath|Payload) -> Payload:
-        if not isinstance(deployment, dict) and os.path.exists(deployment) is False:
-            raise ValueError()
-        elif not isinstance(deployment, dict):
-            deployment = parse_yaml(deployment)
-        workflow_payload = deployment.get("workflow", None)
-        
-        if workflow_payload is None:
-            KeyError()
-            
-        workflow_name = workflow_payload.get("workflow", None)
-        workflow_class = getattr(sys.modules[__name__], workflow_name, None)
-        workflow_kwargs = workflow_payload.get("workflow_kwargs", None)
-        workflow_id = workflow_payload.get("workflow_id", None)
-        task_queue = workflow_payload.get("task_queue", None)
-        
-        #TODO: add support for other arguments such as retry policy
-        
-        if not all([workflow_class, workflow_kwargs, workflow_id, task_queue]):
-            raise KeyError()
-        return (workflow_class, workflow_kwargs, workflow_id, task_queue)
-        
     
 @workflow.defn(sandboxed=False)  
 class AwaitedTask(BaseWorkflow):
@@ -192,21 +197,11 @@ class AwaitedTask(BaseWorkflow):
             return
         
         activity_name = kwargs.get("activity", None)
-        activity = getattr(sys.modules[__name__], activity_name, None)
-        retry_policy = self.parse_retry_policy(kwargs)
-        cancellation_type = self.define_cancelation_type(kwargs)
-        timeouts = self.parse_timeouts(kwargs)
-        args = kwargs.get("args", [])
-        
-        if activity_name is None:
-            raise KeyError("define an activity")
-        
-        if activity is None:
-            raise ValueError("you must refresh your modules")
+        activity, arguments, key_arguments = self.parse_activity(kwargs)
         
         await self.handle_at_start(kwargs)
-        logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
-        await workflow.execute_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
+        logger.info(f"[workflow: {self.__class__.__name__}][activity: {activity_name}][args: {arguments}] Starting activity")
+        await workflow.execute_activity(activity, *arguments, **key_arguments)
         await self.handle_at_end(kwargs)
         
   
@@ -214,27 +209,16 @@ class AwaitedTask(BaseWorkflow):
 class BatchTask(BaseWorkflow):
     @workflow.run
     async def run(self, kwargs: dict[str, Any]) -> None:
-        activities = kwargs.get("batch", None)
-        if activities is None:
+        batch = kwargs.get("batch", None)
+        if batch is None:
             raise KeyError()
         
         await self.handle_at_start(kwargs)
-        for batch in activities:
-            activity_name = batch.get("activity", None)
-            activity = getattr(sys.modules[__name__], activity_name, None)
-            retry_policy = self.parse_retry_policy(batch)
-            cancellation_type = self.define_cancelation_type(batch)
-            timeouts = self.parse_timeouts(batch)
-            args = batch.get("args", [])
-            
-            if activity_name is None:
-                raise KeyError("define an activity")
-            
-            if activity is None:
-                raise ValueError("you must refresh your modules")
-            
-            logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
-            await workflow.start_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
+        for activity_payload in batch:
+            activity_name = activity_payload.get("activity", None)
+            activity, arguments, key_arguments = self.parse_activity(activity_payload)            
+            logger.info(f"[workflow: {self.__class__.__name__}][activity: {activity_name}][args: {arguments}] Starting activity")
+            await workflow.execute_activity(activity, *arguments, **key_arguments)
         await self.handle_at_end(kwargs)
         
 @workflow.defn(sandboxed=False)            
@@ -258,25 +242,14 @@ class AwaitedBatchTask(BaseWorkflow):
         if self._exit:
             return        
 
-        activities = kwargs.get("batch", None)
-        if activities is None:
+        batch = kwargs.get("batch", None)
+        if batch is None:
             raise KeyError()
         
         await self.handle_at_start(kwargs)
-        for batch in activities:
-            activity_name = batch.get("activity", None)
-            activity = getattr(sys.modules[__name__], activity_name, None)
-            retry_policy = self.parse_retry_policy(batch)
-            cancellation_type = self.define_cancelation_type(batch)
-            timeouts = self.parse_timeouts(batch)
-            args = batch.get("args", [])
-            
-            if activity_name is None:
-                raise KeyError("define an activity")
-            
-            if activity is None:
-                raise ValueError("you must refresh your modules")
-            
-            logger.info(f"Starting Workflow {self.__class__.__name__} with activity {activity_name}...")
-            await workflow.start_activity(activity, *args, **timeouts, retry_policy=retry_policy, cancellation_type=cancellation_type)
+        for activity_payload in batch:
+            activity_name = activity_payload.get("activity", None)
+            activity, arguments, key_arguments = self.parse_activity(activity_payload)            
+            logger.info(f"[workflow: {self.__class__.__name__}][activity: {activity_name}][args: {arguments}] Starting activity")
+            await workflow.execute_activity(activity, *arguments, **key_arguments)
         await self.handle_at_end(kwargs)

@@ -1,10 +1,8 @@
 from __future__ import annotations
 import sys
-import copy
 from abc import ABC, abstractmethod
 from datetime import timedelta, datetime
 from temporalio.worker import Worker
-from temporalio.common import WorkflowIDReusePolicy, RetryPolicy
 from temporalio.client import (
     Client,
     Schedule,
@@ -12,10 +10,18 @@ from temporalio.client import (
     ScheduleSpec,
     ScheduleIntervalSpec,
     ScheduleCalendarSpec,
-    ScheduleRange
+    ScheduleRange,
+    SchedulePolicy,
+    ScheduleState,
+    ScheduleOverlapPolicy
 )
 
 from typing import Any, Callable, TypedDict, TypeVar, Generic, Optional
+
+from launchpad.utils import (
+    parse_retry_policy,
+    define_id_reuse_policy
+)
 
 F = TypeVar('F', bound=Callable[..., Any])
 
@@ -72,27 +78,6 @@ class Runner(ABC):
                 continue
             timedeltas.update({k: timedelta(**v)})
         return timedeltas
-    
-    def parse_retry_policy(self, retry_policy: dict[str, Any] | None) -> RetryPolicy:
-        if retry_policy is None:
-            return None
-        
-        initial_interval = retry_policy.get("initial_interval", None)
-        maximum_interval = retry_policy.get("maximum_interval", None)
-        
-        if initial_interval is not None:
-            retry_policy["initial_interval"] = timedelta(**initial_interval)
-        if maximum_interval is not None:
-            retry_policy["maximum_interval"] = timedelta(**maximum_interval)
-        return RetryPolicy(**retry_policy)
-    
-    def define_id_policy(self, id_reuse_policy: str | None) -> WorkflowIDReusePolicy:
-        if id_reuse_policy is None:
-            return WorkflowIDReusePolicy.ALLOW_DUPLICATE
-        id_reuse_policy = getattr(sys.modules[__name__], id_reuse_policy, None)
-        if id_reuse_policy is None:
-            return WorkflowIDReusePolicy.ALLOW_DUPLICATE
-        return id_reuse_policy
 
 
 class WorkflowRunner(Runner):
@@ -126,8 +111,8 @@ class WorkflowRunner(Runner):
             start_delay=start_delay,
             rpc_timeout=rpc_timeout
         )
-        retry_policy = self.parse_retry_policy(retry_policy)
-        id_reuse_policy = self.define_id_policy(id_reuse_policy)        
+        retry_policy = parse_retry_policy({"retry_policy": retry_policy})
+        id_reuse_policy = define_id_reuse_policy({"id_reuse_policy": id_reuse_policy})      
         client = await Client.connect(client_address)
         await client.start_workflow(
             workflow, 
@@ -180,8 +165,8 @@ class WorkflowRunnerWithTempWorker(Runner):
             start_delay=start_delay,
             rpc_timeout=rpc_timeout
         )
-        retry_policy = self.parse_retry_policy(retry_policy)
-        id_reuse_policy = self.define_id_policy(id_reuse_policy)          
+        retry_policy = parse_retry_policy({"retry_policy": retry_policy})
+        id_reuse_policy = define_id_reuse_policy({"id_reuse_policy": id_reuse_policy})          
 
         client = await Client.connect(client_address)
         activity = getattr(sys.modules[__name__], workflow_kwargs.get("activity", None))
@@ -210,6 +195,49 @@ class WorkflowRunnerWithTempWorker(Runner):
         return await self.run(*args, **kwargs)
 
 class ScheduledWorkflowRunner(Runner):
+    
+    def _define_overlap(self, overlap: str | None = None) -> ScheduleOverlapPolicy:
+        if overlap is None: 
+            return ScheduleOverlapPolicy.SKIP
+        overlap = getattr(ScheduleOverlapPolicy, overlap, None)
+        if overlap is None:
+            return KeyError()
+        return overlap
+        
+    
+    def _build_state(
+        self,
+        limited_actions: bool = False,
+        note: Optional[str] = None,
+        paused: bool = False,
+        remaining_actions: int = 0
+        ) -> ScheduleState:
+        return ScheduleState(
+            note=note,
+            paused=paused,
+            limited_actions=limited_actions,
+            remaining_actions=remaining_actions
+        )
+        
+    def _build_policy(
+        self,
+        catchup_window: Optional[TimedeltaArgs] | None = None,
+        overlap: str | None = None,
+        pause_on_failure: bool = False
+        ) -> SchedulePolicy:
+        
+        if catchup_window is None:
+            catchup_window = timedelta(minutes=1)
+        else:
+            catchup_window = timedelta(**catchup_window)
+        overlap = self._define_overlap(overlap)
+        
+        return SchedulePolicy(
+            overlap=overlap,
+            catchup_window=catchup_window,
+            pause_on_failure=pause_on_failure
+        )
+    
     def _build_specs(
         self,
         intervals: Optional[list[Intervals]] | None = None,
@@ -256,16 +284,20 @@ class ScheduledWorkflowRunner(Runner):
                
     async def run(
         self,
+        #actions
         workflow: Callable,
         workflow_kwargs: dict[str, Any],
         scheduler_id: str,
         workflow_id: str,
         task_queue: str,
+        client_address: str = "localhost:7233",
+        trigger_immediately: bool = False,
         execution_timeout: Optional[TimedeltaArgs] | None = None,
         run_timeout: Optional[TimedeltaArgs] | None = None,
         task_timeout: Optional[TimedeltaArgs] | None = None,
         retry_policy: Optional[dict[str, Any]] | None = None,
         memo: Optional[dict[str, Any]] | None = None,
+        #specs
         intervals: Optional[list[Intervals]] | None = None,
         calendars: Optional[list[Calendar]] | None = None,
         crons: Optional[list[str]] | None = None,
@@ -274,15 +306,23 @@ class ScheduledWorkflowRunner(Runner):
         end_at: Optional[DateTimeArgs] | None = None,
         jitter: Optional[TimedeltaArgs] | None = None,
         tz: str = "Europe/Paris",
-        trigger_immediately: bool = False,
-        client_address: str = "localhost:7233",
+        #policy
+        catchup_window: Optional[TimedeltaArgs] | None = None,
+        overlap: str | None = None,
+        pause_on_failure: bool = False,
+        #states
+        limited_actions: bool = False,
+        note: Optional[str] = None,
+        paused: bool = False,
+        remaining_actions: int = 0
         ) -> None:
+        
         timedeltas = self.parse_timedeltas(
             execution_timeout=execution_timeout,
             run_timeout=run_timeout,
             task_timeout=task_timeout,
         )
-        retry_policy = self.parse_retry_policy(retry_policy)        
+        retry_policy = parse_retry_policy({"retry_policy": retry_policy})        
 
         client = await Client.connect(client_address)
         
@@ -309,6 +349,17 @@ class ScheduledWorkflowRunner(Runner):
                     jitter
                     ), 
                     time_zone_name=tz
+                ),
+                policy=self._build_policy(
+                    catchup_window=catchup_window,
+                    overlap=overlap,
+                    pause_on_failure=pause_on_failure
+                ),
+                state= self._build_state(
+                    limited_actions=limited_actions,
+                    note=note,
+                    paused=paused,
+                    remaining_actions=remaining_actions
                 )
             ),
         )
@@ -316,3 +367,7 @@ class ScheduledWorkflowRunner(Runner):
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return await self.run(**kwargs)
     
+
+
+
+
