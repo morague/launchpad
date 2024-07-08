@@ -7,7 +7,7 @@ workflow:
   workflow: # Task | TaskDispatcher | AwaitedTask
   workflow_kwargs: # TEMPLATE: Task | TaskDispatcher | AwaitedTask
 
-  id_reuse_policy: #Optional[str] . temporalio.common.WorkflowIDReusePolicy. when use specify policy name as STR. the runner will retrieve the pyhton object
+  id_reuse_policy: #Optional[str] . temporalio.common.WorkflowIDReusePolicy. when use specify policy name as STR. the runner will retrieve the pyhton object ALLOW_DUPLICATE | ALLOW_DUPLICATE_FAILED_ONLY | REJECT_DUPLICATE | TERMINATE_IF_RUNNING
   cron_schedule: # Optional[str]
   request_eager_start: # Optional[bool] . default = False
   start_signal: # Optional[str] . Workflow signal name as STR
