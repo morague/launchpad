@@ -37,8 +37,14 @@ setup(
     package_data={
         "templates": ["*.yaml", "*.py"],
         "templates.temporal": ["*.py"],
+        "templates.deployments": ["*"],
+        "templates.deployments.workers": ["*.yaml"],
+        "templates.deployments.tasks": ["*.yaml"],
+
+        "templates.deployments_examples": ["*"],
+        "templates.deployments_examples.workers": ["*.yaml"],
+        "templates.deployments_examples.tasks": ["*.yaml"],
         "templates.deployments_templates": ["*.yaml"],
-        "templates.deployments": ["*.yaml"],
     },
     include_package_data=True,
     zip_safe=False,
