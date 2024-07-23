@@ -1,0 +1,12 @@
+type: AsyncWorker
+client_address: "localhost:7233"
+task_queue: default
+workflows:
+  - Task
+  - TaskDispatcher
+  - AwaitedTask
+  - BatchTask
+  - AwaitedBatchTask
+activities:
+  - hello
+max_workers: 100
