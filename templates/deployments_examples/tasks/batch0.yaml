@@ -7,9 +7,9 @@ workflow:
   task_queue: default
   workflow_kwargs:
     batch:
-      - activity: appfile
+      - activity: hello
         args: 
-          - BATHCH0_0
+          - BATHCH0_0_WORLD
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -22,9 +22,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: appfile
+      - activity: hello
         args: 
-          - BATHCH0_1
+          - BATHCH0_1_WORLD
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -37,9 +37,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: appfile
+      - activity: hello
         args: 
-          - BATHCH0_2
+          - BATHCH0_2_WORLD
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON

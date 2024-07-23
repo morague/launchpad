@@ -7,9 +7,9 @@ workflow:
   workflow_id: test5_scheduled_workflow_id
   task_queue: default
   workflow_kwargs:
-    activity: appfile
+    activity: hello
     args: 
-      - SCHEDULED_ROMAIN
+      - SCHEDULED_WORLD
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON

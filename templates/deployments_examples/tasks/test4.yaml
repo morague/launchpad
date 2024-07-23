@@ -7,9 +7,9 @@ workflow:
   workflow_id: test4_workflow_id
   task_queue: temp_default
   workflow_kwargs:
-    activity: appfile
+    activity: hello
     args: 
-      - TEMP_WORKER_ROMAIN
+      - TEMP_WORKER_WORLD
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON

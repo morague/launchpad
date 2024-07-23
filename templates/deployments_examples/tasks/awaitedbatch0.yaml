@@ -10,9 +10,9 @@ workflow:
     at_end:
       renew: True
     batch:
-      - activity: appfile
+      - activity: hello
         args: 
-          - AWAITEDBATHCH0_0
+          - AWAITEDBATHCH0_0_WORLD
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -25,9 +25,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: appfile
+      - activity: hello
         args: 
-          - AWAITEDBATHCH0_1
+          - AWAITEDBATHCH0_1_WORLD
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -40,9 +40,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: appfile
+      - activity: hello
         args: 
-          - AWAITEDBATHCH0_2
+          - AWAITEDBATHCH0_2_WORLD
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON

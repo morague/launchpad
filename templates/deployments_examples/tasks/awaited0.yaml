@@ -7,9 +7,9 @@ workflow:
   workflow_id: awaited_task_id
   task_queue: default
   workflow_kwargs: 
-    activity: appfile
+    activity: hello
     args: 
-      - AWAITED_ROMAIN
+      - AWAITED_WORLD
     at_end:
       renew: True
 

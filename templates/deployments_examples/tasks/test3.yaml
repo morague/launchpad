@@ -7,9 +7,9 @@ workflow:
   workflow_id: test3_workflow_id
   task_queue: default
   workflow_kwargs:
-    activity: appfile
+    activity: hello
     args: 
-      - TEST3_ROMAIN
+      - TEST3_WORLD
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON

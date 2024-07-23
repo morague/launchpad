@@ -7,9 +7,9 @@ workflow:
   workflow_id: chained_task_1
   task_queue: default
   workflow_kwargs:
-    activity: appfile
+    activity: hello
     args: 
-      - CHAINED_ROMAIN_1
+      - CHAINED_WORLD_1
 
     at_end:
       chain_with:
