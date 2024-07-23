@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import importlib.resources
 import os
 import sys
 import glob
 import asyncio
 import logging
-from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
@@ -17,6 +17,7 @@ from sanic import Sanic
 
 import importlib
 import importlib.util
+from importlib.resources import files
 
 from types import ModuleType
 from typing import Callable, Optional, Any
@@ -88,6 +89,10 @@ class Module:
     def ftype(self):
         return self.module.suffix.strip(".")
     
+    @property
+    def from_package(self):
+        return "site-packages" in [p.name for p in self.module.parents]
+    
     def __init__(self, module_fp: str | Path, new: bool= False) -> None:
         self.__module = self._parse_path(module_fp)
         self.__latest = self.version()
@@ -137,6 +142,11 @@ class Module:
             raise ValueError("path doesn't exist")
         return path
 
+    def _package_rel_path(self) -> Path:
+        index = [p.name for p in self.module.parents].index("site-packages")
+        return self.module.relative_to(self.module.parents[index])
+
+
 
 class YamlModule(Module):    
     def __init__(self, module_fp: Path, new: bool= False) -> None:
@@ -155,9 +165,12 @@ class PyModule(Module):
         
     @property
     def module_name(self):
-        file = self.module.stem
-        path = str(self.module.relative_to("./")).split("/")[:-1]
-        return ".".join(path + [file])
+        if self.from_package:
+            rel_path = self._package_rel_path()
+        else:
+            rel_path = Path(os.path.relpath(self.module))
+        path = [p.name for p in rel_path.parents if p.name != ""]
+        return ".".join(path + [rel_path.stem])
     
     def reload(self) -> ModuleType:
         spec = importlib.util.spec_from_file_location(
@@ -295,10 +308,10 @@ class Group(object):
         return removed_paths
         
     def _explore(self, path: Path) -> list[Path]:
-        relpath = path.relative_to("./")
-        py = glob.glob(f"{relpath}/**/[!_]*.py", recursive=True)
-        yaml = glob.glob(f"{relpath}/**/[!_]*.yaml", recursive=True)
-        yml = glob.glob(f"{relpath}/**/[!_]*.yml", recursive=True)
+        # relpath = path.relative_to("./")
+        py = glob.glob(str(path.joinpath("**", "[!_]*.py")), recursive=True)
+        yaml = glob.glob(str(path.joinpath("**", "[!_]*.yaml")), recursive=True)
+        yml = glob.glob(str(path.joinpath("**", "[!_]*.yml")), recursive=True)
         return [Path(p) for p in py + yaml + yml if Path(p) not in self.skips]
         
 
@@ -438,12 +451,11 @@ class LaunchpadWatcher(Watcher):
     polling_interval: int = 600
     automatic_refresh: bool = True
     base_modules: dict[str, list[str | Path]] = {
-        "configs": [os.environ.get('CONFIG_FILEPATH', "./configs/configs.yaml")],
-        "workflows": ["./launchpad/workflows.py"],
-        "workers": ["./launchpad/workers.py"],
-        "runners": ["./launchpad/runners.py"],
-        "routes": ["./launchpad/routes"],
-        "temporal": ["./launchpad/temporal_server.py"]
+        "workflows": [files("launchpad").joinpath("workflows.py")],
+        "workers": [files("launchpad").joinpath("workers.py")],
+        "runners": [files("launchpad").joinpath("runners.py")],
+        "routes": [files("launchpad").joinpath("routes")],
+        "temporal": [files("launchpad").joinpath("temporal_server.py")]
     }
     
     def __init__(self, *paths: str | Path,  **groups: Group) -> None:
@@ -462,7 +474,7 @@ class LaunchpadWatcher(Watcher):
     
     
     def deployments_workers(self):
-        return {v["task_queue"]:v for v in self.get("workers").payloads().values()}
+        return {v["worker"]["task_queue"]:v for v in self.get("workers").payloads().values()}
 
     def activities(self):
         return {k:v for k,v in self.get("activities").temporal_objects().items() if is_activity(v)}
@@ -525,7 +537,7 @@ class LaunchpadWatcher(Watcher):
         self.automatic_refresh = toggle
         
     def _initialize_temporal_objects(self, module_name: str) -> None:
-        groups = ["activities", "workflows", "workers", "runners"]
+        groups = ["activities", "workflows", "workers", "runners", "routes"]
         for group in groups:
             modules = self.get(group).load()
             objects = self.get(group).temporal_objects()
@@ -547,3 +559,5 @@ class LaunchpadWatcher(Watcher):
     #     self.watcher.kill()
     #     self.watcher = None
     
+
+
