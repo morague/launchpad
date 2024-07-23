@@ -1,4 +1,14 @@
 __pycache__
+.pytest_cache
 *.env
 volume
 .coverage
+*.egg*
+build
+dist
+deployments
+configs
+activities
+launchpad_configs.yaml
+*.sh
+asgi.py
