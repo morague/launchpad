@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from sanic import Sanic
 from sanic.log import LOGGING_CONFIG_DEFAULTS
 
-from typing import Any
+from typing import Any, Optional
 
 from launchpad.watcher import LaunchpadWatcher
 from launchpad.authentication import Authenticator
@@ -27,7 +28,7 @@ from launchpad.middlewares import go_fast, log_exit, cookie_token
 launchpad.runners, launchpad.activities, launchpad.workflows, launchpad.workers
 are imported dynamically by the LaunchpadWatcher.
 """
-
+StrOrPath = str|Path
 Payload = dict[str,Any]
 Sanic.START_METHOD_SET = True
 Sanic.start_method = "fork"
@@ -39,7 +40,7 @@ BANNER = """\
   / /   / __ `/ / / / __ \/ ___/ __ \/ __ \/ __ `/ __  / 
  / /___/ /_/ / /_/ / / / / /__/ / / / /_/ / /_/ / /_/ /  
 /_____/\__,_/\__,_/_/ /_/\___/_/ /_/ .___/\__,_/\__,_/   
-                                  /_/          v0.4.0               
+                                  /_/          v0.5.0               
 """
 
 class Launchpad(object):    
@@ -133,11 +134,44 @@ class Launchpad(object):
             self.app.ctx.workers = WorkersManager.initialize(*[v for v in deployments_workers_settings.values()])
         
     @classmethod
-    def create_app(cls) -> Launchpad:
-        configs = get_config(os.environ.get("CONFIG_FILEPATH", "./configs/configs.yaml"))
-        return cls(**configs)
+    def create_app(cls, configs_path: Optional[StrOrPath] | None = None) -> Sanic:
+        if configs_path is None:
+            configs_path = os.environ.get("CONFIG_FILEPATH", "./launchpad_configs.yaml")
+        if os.path.exists(configs_path):
+            configs = get_config(configs_path)
+        else:
+            FileNotFoundError("configs file not found")
+        launchpad = cls(**configs)
+        return launchpad.app
     
     def configure_logging(self, logging: Payload) -> Payload:
+        # base logging
+        logging["formatters"].update(
+            {
+                "simple": {
+                    "class": "logging.Formatter", 
+                    "format": "[%(asctime)s][%(name)s][%(process)d][%(levelname)s] | %(message)s", 
+                    "datefmt": "%d-%m-%Y %H:%M:%S"
+                }
+            })
+        logging["handlers"].update(
+            {
+                "stream": {
+                    "class": "logging.StreamHandler",
+                    "level": "INFO",
+                    "formatter": "simple",
+                    "stream": "ext://sys.stdout"
+                }
+            })
+        logging["loggers"].update({
+            "endpointAccess": {"level": "INFO", "handlers": ["stream"], "propagate": False},
+            "watcher": {"level": "INFO", "handlers": ["stream"], "propagate": False},
+            "workflows": {"level": "INFO", "handlers": ["stream"], "propagate": False},
+            "workers": {"level": "INFO", "handlers": ["stream"], "propagate": False},
+            "temporal": {"level": "INFO", "handlers": ["stream"], "propagate": False}
+        })
+
+        # update with user specs
         logging["loggers"].update(LOGGING_CONFIG_DEFAULTS["loggers"])
         logging["handlers"].update(LOGGING_CONFIG_DEFAULTS["handlers"])
         logging["formatters"].update(LOGGING_CONFIG_DEFAULTS["formatters"])  

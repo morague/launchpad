@@ -69,7 +69,8 @@ class WorkersManager:
     def initialize(cls, *workers_settings) -> WorkersManager:
         controler = cls()
         for settings in workers_settings:
-            controler.add_worker(**settings)
+            if settings.get("deploy_on_server_start", False):
+                controler.add_worker(**settings)
         return controler
     
     @classmethod
@@ -79,7 +80,8 @@ class WorkersManager:
     
     @log
     def add_worker(self, **settings):
-        worker = self._build_worker(settings)
+        worker_settings = settings.get("worker", None)
+        worker = self._build_worker(worker_settings)
         process = Process(target= worker.run)
         process.start()
         self.__workers[worker.task_queue] = ((worker, process))
