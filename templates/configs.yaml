@@ -1,0 +1,92 @@
+app:
+  env: development
+  sanic:
+    app:
+      temporal_client_address: "localhost:7233"
+      temporal_gui_address: "localhost:8233"
+      secret: "xxxxxxx"
+
+  temporalio:
+    external_server: True
+    deploy_tasks_on_server_start: True
+
+  watcher:
+    modules:
+      workers:
+        basepaths:
+          - ./deployments/workers
+      workflows:
+        basepaths:
+          - ./{{ name }}/temporal/workflows.py
+      deployments:
+        basepaths:
+          - ./deployments/tasks
+      activities:
+        basepaths:
+          - ./{{ name }}/temporal/activities.py
+      runners:
+        basepaths:
+          - ./{{ name }}/temporal/runners.py
+    polling:
+      on_server_start: True
+      automatic_refresh: True
+      polling_interval: 600
+      
+  authenticator:
+    db: ":memory:"
+    base_users:
+      - username: test
+        password: test
+        auth_level:
+          - "user"
+          - "super user"
+        max_age: 600
+
+  logging:
+    version: 1
+    disable_existing_loggers: False
+    formatters:
+      simple: 
+        class: logging.Formatter
+        format: "[%(asctime)s][%(name)s][%(process)d][%(levelname)s] | %(message)s"
+        datefmt: "%d-%m-%Y %H:%M:%S"
+    handlers:
+      stream:
+        class: logging.StreamHandler
+        level: INFO
+        formatter: simple
+        stream: ext://sys.stdout
+
+      error_file:
+        class: logging.FileHandler
+        level: ERROR
+        formatter: simple
+        filename: ./volume/errors.log
+
+      access_file:
+        class: logging.FileHandler
+        level: INFO
+        formatter: simple
+        filename: ./volume/log.log
+
+    loggers:
+      endpointAccess:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
+      watcher:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
+      workflows:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
+      workers:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False
+      temporal:
+        level: INFO
+        handlers: [stream, error_file, access_file]
+        propagate: False

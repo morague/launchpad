@@ -1,0 +1,38 @@
+# -- WORKFLOW RUNNER WITH TEMPWORKER TEST + TASK WORKFLOW
+name: test4
+runner: WorkflowRunnerWithTempWorker
+client_address: localhost:7233
+workflow:
+  workflow: Task
+  workflow_id: test4_workflow_id
+  task_queue: temp_default
+  workflow_kwargs:
+    activity: appfile
+    args: 
+      - TEMP_WORKER_ROMAIN
+    start_to_close_timeout:
+      seconds: 5
+    cancellation_type: ABANDON
+    retry_policy:
+      backoff_coefficient: 2.0
+      initial_interval:
+        seconds: 5
+      maximum_attempts: 5
+      non_retryable_error_types:
+        - ValueError
+        - KeyError
+  
+  retry_policy:
+    backoff_coefficient: 2.0 
+    initial_interval: 
+      seconds: 5
+
+    maximum_attempts: 5
+    maximum_interval:
+      seconds: 5
+
+    non_retryable_error_types:
+      - ValueError
+      - KeyError
+  memo: 
+    test: "this is a test"
