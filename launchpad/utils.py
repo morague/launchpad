@@ -1,15 +1,58 @@
 import sys
 import copy
+import json
 from pathlib import Path
 from datetime import timedelta
+from collections import deque
+from jinja2 import Template, StrictUndefined
+import collections.abc
+
 from temporalio.common import RetryPolicy, SearchAttributes, TypedSearchAttributes, WorkflowIDReusePolicy
 from temporalio.workflow import (
     VersioningIntent,
     ActivityCancellationType,
-    ParentClosePolicy,   
+    ParentClosePolicy,
 )
 
 from typing import Type, Callable, Any
+
+"""
+SETTINGS (yaml) > PYYAML + ENV_MAP >
+
+${ENVNAME}
+"""
+
+def dyn_update(settings: dict[str, Any], overwrite: dict[str, Any]) -> dict[str, Any]:
+    """
+    dyn into nested dicts and overwrite values.
+    :overwrite:
+        key format: "layer0.layer1.arg"
+    """
+    def update(settings: dict[str, Any], layers: deque[str], value: Any) -> dict[str, Any]:
+        layer = layers.popleft()
+        if settings.get(layer, None) is None:
+            raise KeyError(f"overwrite key {layer} not found")
+        if len(layers) > 0:
+            settings[layer] = update(settings[layer], layers, value)
+        else:
+            settings[layer] = value
+        return settings
+
+    for key, value in overwrite.items():
+        layers = deque(key.split("."))
+        settings = update(settings, layers, value)
+    return settings
+
+def dyn_templating(settings: dict[str, Any], template_values: dict[str, Any]) -> dict[str, Any]:
+    base = json.dumps(settings)
+    template = Template(base, undefined=StrictUndefined).render(**template_values)
+    return json.loads(template)
+
+
+
+
+
+# -- TEMPORALio utils
 
 def is_workflow(cls: Type) -> bool:
     if hasattr(cls, "__temporal_workflow_definition"):
@@ -58,16 +101,16 @@ def parse_retry_policy(kwargs: dict[str, Any]) -> RetryPolicy | None:
     retry_policy = copy.deepcopy(kwargs.get("retry_policy", None))
     if retry_policy is None:
         return None
-    
+
     initial_interval = retry_policy.get("initial_interval", None)
     maximum_interval = retry_policy.get("maximum_interval", None)
-    
+
     if initial_interval is not None:
         retry_policy["initial_interval"] = timedelta(**initial_interval)
     if maximum_interval is not None:
         retry_policy["maximum_interval"] = timedelta(**maximum_interval)
     return RetryPolicy(**retry_policy)
-    
+
 def define_versioning_intent(kwargs: dict[str, Any]) -> VersioningIntent | None:
     versioning_intent = kwargs.get("versioning_intent", None)
     if versioning_intent is None:
@@ -92,7 +135,7 @@ def define_parent_close_policy(kwargs: dict[str, Any]) -> ParentClosePolicy | No
         return ParentClosePolicy.TERMINATE
     parent_close_policy = getattr(ParentClosePolicy, parent_close_policy, None)
     if parent_close_policy is None:
-        return ParentClosePolicy.TERMINATE  
+        return ParentClosePolicy.TERMINATE
     return parent_close_policy
 
 def define_id_reuse_policy(kwargs: dict[str, Any]) -> WorkflowIDReusePolicy:
@@ -113,4 +156,3 @@ def parse_timeouts(kwargs: dict[str, Any]) -> dict[str, timedelta]:
         if k.endswith("_timeout"):
             timeouts.update({k:timedelta(**v)})
     return timeouts
-
