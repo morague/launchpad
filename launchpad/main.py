@@ -14,14 +14,23 @@ from launchpad.parsers import get_config
 
 from launchpad.routes.tasks import tasksbp
 from launchpad.routes.schedules import schedulesbp
-from launchpad.routes.workers import workersbp
+from launchpad.routes.servers import serversbp, workersbp
 from launchpad.routes.watcher import watcherbp
 from launchpad.routes.base import basebp
 from launchpad.routes.login import loginbp
 
 from launchpad.routes.errors_handler import error_handler
-from launchpad.listeners import start_watcher, on_start_deploy_workers, on_start_deploy_tasks
-from launchpad.middlewares import go_fast, log_exit, cookie_token
+from launchpad.listeners import (
+    start_watcher,
+    on_start_deploy_workers,
+    on_start_deploy_tasks
+)
+from launchpad.middlewares import (
+    go_fast,
+    log_exit,
+    cookie_token,
+    extract_params
+)
 
 """
 launchpad.runners, launchpad.activities, launchpad.workflows, launchpad.workers
@@ -68,6 +77,7 @@ class Launchpad(object):
         self.app.blueprint(basebp)
         self.app.blueprint(tasksbp)
         self.app.blueprint(schedulesbp)
+        self.app.blueprint(serversbp)
         self.app.blueprint(workersbp)
         self.app.blueprint(watcherbp)
         self.app.blueprint(loginbp)
@@ -75,6 +85,7 @@ class Launchpad(object):
         self.app.error_handler.add(Exception, error_handler)
         self.app.on_request(go_fast, priority=100)
         self.app.on_request(cookie_token, priority=99)
+        self.app.on_request(extract_params, priority=98)
         self.app.on_response(log_exit, priority=100)
 
     async def initialize_components(

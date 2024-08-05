@@ -6,6 +6,7 @@ from sanic import Request
 from sanic.response import empty, redirect
 
 from launchpad.authentication import protected
+from launchpad.temporal_server import TemporalServersManager
 
 basebp = Blueprint("basebp", url_prefix="/")
 
@@ -17,5 +18,8 @@ async def favicon(request: Request):
 @basebp.get("/temporal")
 @protected("user")
 async def get_temporal_ui(request: Request):
-    gui = request.app.config.TEMPORAL_GUI_ADDRESS
-    return redirect(f"http://{gui}")
+    temporal: TemporalServersManager = request.app.ctx.temporal
+
+    server_name = request.ctx.params.server
+    server = temporal.get_server(server_name)
+    return redirect(f"http://{server.gui_address}")

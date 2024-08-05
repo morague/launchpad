@@ -1,15 +1,19 @@
 import os
 import json
+from pathlib import Path
+from attrs import define, field, validators
+from sanic.config import DEFAULT_CONFIG
 import yaml
 import warnings
 from yaml import SafeLoader
-from typing import Dict, Any
 from collections import defaultdict, ChainMap
+
+from typing import Dict, Any, Callable
 
 Payload = Dict[str, Any]
 
 
-def parse_yaml(fp: str) -> Payload:
+def parse_yaml(fp: str|Path) -> Payload:
     with open(fp, "r") as f:
         payload = yaml.load(f, SafeLoader)
     payload = map_env(payload)
@@ -73,9 +77,24 @@ def map_env(payload: Payload) -> Payload:
     return payload
 
 
-def get_config(path: str) -> Payload:
+def get_config(path: str|Path) -> Payload:
     with open(path, "r") as f:
         config = yaml.load(f, SafeLoader)
         config = parse_config(config)
         config = map_env(config)
     return config
+
+
+
+@define(slots=False, kw_only=True)
+class ParamsParser:
+    # temporal gui
+    server: str = field(default="home", validator=[validators.instance_of(str)])
+
+    # DYNAMIC arguments setting.
+    overwrite: dict[str, Any] = field(default=None)
+    template_args: dict[str, Any] = field(default=None)
+
+    def get_kwargs(self, f: Callable) -> dict[str, Any]:
+        """match function params with parsed params. Return all non null params used by the function."""
+        return {k:getattr(self, k) for k,v in f.__annotations__.items() if getattr(self, k, None) is not None}
