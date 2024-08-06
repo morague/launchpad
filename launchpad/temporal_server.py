@@ -5,6 +5,7 @@ import logging
 import subprocess
 import signal
 import copy
+from collections.abc import Sequence, Mapping
 from types import SimpleNamespace
 from attr import validators
 from sanic import Sanic
@@ -15,6 +16,8 @@ from google.protobuf.duration_pb2 import Duration
 from temporalio.service import HttpConnectProxyConfig, RPCError, RPCStatusCode
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.client import Client
+from temporalio.runtime import Runtime, TelemetryConfig
+from temporalio.runtime import LoggingConfig, TelemetryFilter, LogForwardingConfig
 from temporalio.service import ConnectConfig, ServiceClient, HttpConnectProxyConfig
 from temporalio.api.workflowservice.v1 import RegisterNamespaceRequest, ListNamespacesRequest
 from temporalio.api.operatorservice.v1 import DeleteNamespaceRequest
@@ -37,6 +40,14 @@ AioTaskName = str | None
 logger = logging.getLogger("temporal")
 
 
+core_runtime = Runtime(telemetry=TelemetryConfig(
+    logging=LoggingConfig(
+        filter= TelemetryFilter(core_level="INFO", other_level="INFO")
+    )
+))
+
+RUNTIME = core_runtime
+RUNTIME.set_default(core_runtime)
 
 
 class NameSpace:
@@ -134,7 +145,7 @@ class TemporalServer:
     default_namespace: NameSpace = field(init=False)
     proxy: HttpConnectProxyConfig | None = field(default=None)
     api_key: str | None = field(default=None)
-
+    runtime: Runtime =  RUNTIME
     @property
     def address(self):
         return f"{self.ip}:{str(self.port)}"
@@ -197,7 +208,8 @@ class TemporalServer:
             self.address,
             namespace=namespace,
             http_connect_proxy_config=self.proxy,
-            api_key=self.api_key
+            api_key=self.api_key,
+            runtime=self.runtime
         )
         return client
 
@@ -206,7 +218,8 @@ class TemporalServer:
             ConnectConfig(
                 target_host=self.address,
                 http_connect_proxy_config=self.proxy,
-                api_key=self.api_key
+                api_key=self.api_key,
+                runtime=self.runtime
             )
         )
         return client
@@ -372,13 +385,13 @@ class TemporalServersManager:
     def update_server(self) -> None:
         ...
 
-    def refresh_temporal_objects(self, **temporal_objs: dict[str, Type] | None) -> None:
+    def refresh_temporal_objects(self, **temporal_objs: Mapping[str, Type] | None) -> None:
         for name, objects in temporal_objs.items():
             if name not in ["activities", "workflows", "runners", "workers"] or objects is None:
                 continue
             setattr(self.temporal_objects, name, objects)
 
-    def refresh_settings(self, **settings: dict[str, dict[str, Any]] | None) -> None:
+    def refresh_settings(self, **settings: Mapping[str, Mapping[str, Any]] | None) -> None:
         for name, setting in settings.items():
             if name not in ["tasks_settings", "workers_settings"] or setting is None:
                 continue
@@ -414,6 +427,27 @@ class TemporalServersManager:
         if server is None:
             raise KeyError("Server does not exist")
         return server
+
+    async def get_temporal_frame(self, namespace_name: str | None = None, server_name: str | None = None) -> tuple[TemporalServer, NameSpace, Client]:
+        """ get a server, namespace frame a client connection"""
+        if server_name is None:
+            server: TemporalServer = self.default_server
+        else:
+            server: TemporalServer = self.get_server(server_name)
+
+        if server is None:
+            raise KeyError("Unknow, server.")
+
+        if namespace_name is None:
+            namespace = server.default_namespace
+        else:
+            namespace = server.namespaces.get(namespace_name)
+
+        if namespace is None:
+            raise KeyError("Unknown namespace")
+
+        client = await server.get_client(namespace=namespace.name)
+        return (server, namespace, client)
 
     async def get_client(self, server_name: str, namespace: str = "default") -> Client:
         server = self.get_server(server_name)
@@ -547,25 +581,7 @@ class TemporalServersManager:
     async def _get_temporal_frame(self, settings: dict[str, Any]) -> tuple[TemporalServer, NameSpace, Client]:
         server_name = settings.get("server", None)
         namespace_name = settings.get("namespace", None)
-
-        if server_name is None:
-            server: TemporalServer = self.default_server
-        else:
-            server: TemporalServer = self.get_server(server_name)
-
-        if server is None:
-            raise KeyError("Unknow server.")
-
-        if namespace_name is None:
-            namespace = server.default_namespace
-        else:
-            namespace = server.namespaces.get(namespace_name)
-
-        if namespace is None:
-            raise KeyError("Unknow namespace")
-
-        client = await server.get_client(namespace=namespace.name)
-        return (server, namespace, client)
+        return await self.get_temporal_frame(namespace_name, server_name)
 
     def _get_runner_frame(self, settings: dict[str, Any] , client: Client) -> dict[str, Any]:
         payload = settings.get("workflow", None)
