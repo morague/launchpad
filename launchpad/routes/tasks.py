@@ -5,13 +5,17 @@ import copy
 from sanic import Blueprint
 from sanic import Request
 from sanic.response import empty, json, redirect
-from temporalio.client import Client
+from temporalio.client import (
+    Client,
+    ScheduleUpdate,
+    ScheduleUpdateInput,
+)
 
 from launchpad.temporal_server import TemporalServersManager
 from launchpad.authentication import protected
 
 tasksbp = Blueprint("tasksbp", url_prefix="/tasks")
-
+schedulesbp = Blueprint("schedulesbp", url_prefix="/schedules")
 
 @tasksbp.get("/")
 @protected("user")
@@ -69,3 +73,69 @@ async def signal(request: Request, server_name: str, namespace: str, workflow_na
 
     await handle.signal(signal_method, *args)
     return json({"status":200, "reasons": "OK", "data":{"workflow": workflow_name, "workflow_id": workflow_id, "signal": signal_name}},status=200)
+
+# -- SCHEDULES
+
+@schedulesbp.route("/restart/<scheduler_id:str>", methods=["GET", "POST"])
+@protected("user")
+async def start_schedule(request: Request, scheduler_id: str):
+    temporal: TemporalServersManager = request.app.ctx.temporal
+    params = request.ctx.params.get_kwargs(temporal.get_temporal_frame)
+    server, namespace, client = await temporal.get_temporal_frame(**params)
+
+    handle = client.get_schedule_handle(scheduler_id,)
+    await handle.unpause()
+    return json({"status":200, "reasons": "OK", "data": {
+        "server": server.name,
+        "namespace": namespace.name,
+        "restarted":scheduler_id
+        }
+    }, status=200)
+
+@schedulesbp.route("/pause/<scheduler_id:str>", methods=["GET", "POST"])
+@protected("user")
+async def pause_schedule(request: Request, scheduler_id: str):
+    temporal: TemporalServersManager = request.app.ctx.temporal
+    params = request.ctx.params.get_kwargs(temporal.get_temporal_frame)
+    server, namespace, client = await temporal.get_temporal_frame(**params)
+
+    handle = client.get_schedule_handle(scheduler_id,)
+    await handle.pause()
+    return json({"status":200, "reasons": "OK", "data": {
+        "server": server.name,
+        "namespace": namespace.name,
+        "paused":scheduler_id
+        }
+    }, status=200)
+
+@schedulesbp.route("/trigger/<scheduler_id:str>", methods=["GET", "POST"])
+@protected("user")
+async def trigger_schedule(request: Request, scheduler_id: str):
+    temporal: TemporalServersManager = request.app.ctx.temporal
+    params = request.ctx.params.get_kwargs(temporal.get_temporal_frame)
+    server, namespace, client = await temporal.get_temporal_frame(**params)
+
+    handle = client.get_schedule_handle(scheduler_id,)
+    await handle.trigger()
+    return json({"status":200, "reasons": "OK", "data": {
+        "server": server.name,
+        "namespace": namespace.name,
+        "triggered": scheduler_id
+        }
+    }, status=200)
+
+@schedulesbp.route("/delete/<scheduler_id:str>", methods=["GET", "POST"])
+@protected("user")
+async def delete_schedule(request: Request, scheduler_id: str):
+    temporal: TemporalServersManager = request.app.ctx.temporal
+    params = request.ctx.params.get_kwargs(temporal.get_temporal_frame)
+    server, namespace, client = await temporal.get_temporal_frame(**params)
+
+    handle = client.get_schedule_handle(scheduler_id,)
+    await handle.delete()
+    return json({"status":200, "reasons": "OK", "data": {
+        "server": server.name,
+        "namespace": namespace.name,
+        "triggered": scheduler_id
+        }
+    }, status=200)

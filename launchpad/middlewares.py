@@ -1,11 +1,13 @@
 
 import logging
+import traceback
 from time import perf_counter
 from collections import ChainMap
 from urllib.parse import unquote
-from sanic import Request, HTTPResponse
+from sanic import Request, HTTPResponse, json
 
 from launchpad.parsers import ParamsParser
+from launchpad.exceptions import LaunchpadException
 
 logger = logging.getLogger("endpointAccess")
 
@@ -33,3 +35,14 @@ async def extract_params(request: Request) -> None:
     payload = request.load_json() or {}
     params = dict(ChainMap(nid, payload, query_args))
     request.ctx.params = ParamsParser(**params)
+
+async def error_handler(request: Request, exception: Exception):
+    perf = round(perf_counter() - request.ctx.t, 5)
+    status = getattr(exception, "status", 500)
+    logger.error(
+        f"{request.host} > {request.method} {request.url} : {str(exception)} [None][{str(status)}][{str(len(str(exception)))}b][{perf}s]" #{request.load_json()}
+    )
+    if not isinstance(exception.__class__.__base__, LaunchpadException):
+        # log traceback of non handled errors
+        logger.error(traceback.format_exc())
+    return json({"status": status, "reasons": str(exception)}, status=status)

@@ -20,6 +20,6 @@ async def favicon(request: Request):
 async def get_temporal_ui(request: Request):
     temporal: TemporalServersManager = request.app.ctx.temporal
 
-    server_name = request.ctx.params.server
+    server_name = request.ctx.params.server_name
     server = temporal.get_server(server_name)
     return redirect(f"http://{server.gui_address}")
