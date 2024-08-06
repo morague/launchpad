@@ -14,7 +14,7 @@ from temporalio.workflow import (
     ParentClosePolicy,
 )
 
-from typing import Type, Callable, Any
+from typing import Sequence, Type, Callable, Any
 
 """
 SETTINGS (yaml) > PYYAML + ENV_MAP >
@@ -47,6 +47,9 @@ def dyn_templating(settings: dict[str, Any], template_values: dict[str, Any]) ->
     base = json.dumps(settings)
     template = Template(base, undefined=StrictUndefined).render(**template_values)
     return json.loads(template)
+
+def to_path(paths: Sequence[str | Path]) -> list[Path]:
+    return [Path(p) if isinstance(p, str) else p for p in paths]
 
 
 
@@ -89,9 +92,6 @@ def query_kwargs(args: list[tuple[str, str]]) -> dict[str, Any]:
         if v.isnumeric():
             kwargs.update({k:int(v)})
     return kwargs
-
-def to_path(paths: list[str | Path]) -> list[Path]:
-    return [Path(p) if isinstance(p, str) else p for p in paths]
 
 
 

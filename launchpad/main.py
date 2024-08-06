@@ -12,14 +12,12 @@ from launchpad.authentication import Authenticator
 from launchpad.temporal_server import TemporalServersManager
 from launchpad.parsers import get_config
 
-from launchpad.routes.tasks import tasksbp
-from launchpad.routes.schedules import schedulesbp
+from launchpad.routes.tasks import tasksbp, schedulesbp
 from launchpad.routes.servers import serversbp, workersbp
 from launchpad.routes.watcher import watcherbp
 from launchpad.routes.base import basebp
 from launchpad.routes.login import loginbp
 
-from launchpad.routes.errors_handler import error_handler
 from launchpad.listeners import (
     start_watcher,
     on_start_deploy_workers,
@@ -29,7 +27,8 @@ from launchpad.middlewares import (
     go_fast,
     log_exit,
     cookie_token,
-    extract_params
+    extract_params,
+    error_handler
 )
 
 """
@@ -48,7 +47,7 @@ BANNER = """\
   / /   / __ `/ / / / __ \/ ___/ __ \/ __ \/ __ `/ __  /
  / /___/ /_/ / /_/ / / / / /__/ / / / /_/ / /_/ / /_/ /
 /_____/\__,_/\__,_/_/ /_/\___/_/ /_/ .___/\__,_/\__,_/
-                                  /_/          v0.5.0
+                                  /_/          v0.6.0
 """
 
 class Launchpad(object):

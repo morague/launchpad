@@ -88,8 +88,9 @@ def get_config(path: str|Path) -> Payload:
 
 @define(slots=False, kw_only=True)
 class ParamsParser:
-    # temporal gui
-    server: str = field(default="home", validator=[validators.instance_of(str)])
+    # temporal gui ; schedules
+    server_name: str = field(default="home", validator=[validators.instance_of(str)])
+    namespace_name: str = field(default="default", validator=[validators.instance_of(str)])
 
     # DYNAMIC arguments setting.
     overwrite: dict[str, Any] = field(default=None)
