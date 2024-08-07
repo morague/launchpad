@@ -86,15 +86,30 @@ def get_config(path: str|Path) -> Payload:
 
 
 
+def convert_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    elif isinstance(value, str):
+        return int(value)
+    else:
+        raise ValueError()
+
 @define(slots=False, kw_only=True)
 class ParamsParser:
     # temporal gui ; schedules
-    server_name: str = field(default="home", validator=[validators.instance_of(str)])
-    namespace_name: str = field(default="default", validator=[validators.instance_of(str)])
+    server_name: str | None = field(default="home", validator=[validators.instance_of(str)])
+    namespace_name: str | None = field(default="default", validator=[validators.instance_of(str)])
 
     # DYNAMIC arguments setting.
-    overwrite: dict[str, Any] = field(default=None)
-    template_args: dict[str, Any] = field(default=None)
+    overwrite: dict[str, Any] | None = field(default=None)
+    template_args: dict[str, Any] | None = field(default=None)
+
+    # watcher route
+    polling_interval: int | None = field(default=None, converter=convert_int)
+    changed: bool | None = field(default=False)
+    unchanged: bool | None = field(default=False)
 
     def get_kwargs(self, f: Callable) -> dict[str, Any]:
         """match function params with parsed params. Return all non null params used by the function."""

@@ -25,8 +25,8 @@ from temporalio.api.errordetails.v1 import NamespaceAlreadyExistsFailure
 
 from typing import Any, Type, Coroutine
 
-from launchpad.runners import Runner
-from launchpad.workers import LaunchpadWorker
+from launchpad.temporal.runners import Runner
+from launchpad.temporal.workers import LaunchpadWorker
 from launchpad.utils import dyn_update, dyn_templating
 
 

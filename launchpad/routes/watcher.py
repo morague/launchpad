@@ -6,7 +6,6 @@ from sanic.response import json
 
 from launchpad.tasks import watcher_watch
 from launchpad.watcher import LaunchpadWatcher
-from launchpad.utils import query_kwargs
 
 from launchpad.authentication import protected
 
@@ -20,14 +19,16 @@ async def modules(request: Request):
     unchanged = args.get("unchanged", False)
     if changed and unchanged:
         changed, unchanged = False, False
-    
+
     watcher: LaunchpadWatcher = request.app.ctx.watcher
-    if not any([changed, unchanged]):    
-        references = {k:[m.as_json() for m in v.modules.values()] for k,v in watcher.groups.items()}    
+    if not any([changed, unchanged]):
+        references = {k:[m.as_json() for m in v.modules.values()] for k,v in watcher.groups.items()}
     elif changed:
         references = {k:[m.as_json() for m in v.modules.values() if m.changes] for k,v in watcher.groups.items()}
     elif unchanged:
         references = {k:[m.as_json() for m in v.modules.values() if m.changes is False] for k,v in watcher.groups.items()}
+    else:
+        references = {}
     return json({"status":200, "reasons": "OK", "data": references}, status=200)
 
 @watcherbp.get("/modules/<group:str>")
@@ -41,11 +42,12 @@ async def group_modules(request: Request, group: str):
 @protected("user")
 async def get_pooler(request: Request):
     watcher: LaunchpadWatcher = request.app.ctx.watcher
+    alive = False
     if request.app.get_task("watch", raise_exception=False) is not None:
-        alive = True 
-    data = {"alive": alive, "polling_interval": watcher.polling_interval, "automatic_refresh": watcher.automatic_refresh}    
+        alive = True
+    data = {"alive": alive, "polling_interval": watcher.polling_interval, "automatic_refresh": watcher.automatic_refresh}
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
-    
+
 @watcherbp.get("/polling/stop")
 @protected("user")
 async def stop_polling(request: Request):
@@ -56,18 +58,17 @@ async def stop_polling(request: Request):
 @watcherbp.get("/polling/start")
 @protected("user")
 async def start_polling(request: Request):
-    
-    query = query_kwargs(request.query_args)
-    polling_interval = query.get("polling_interval", None)
-    
+    """:query: polling_interval (int)"""
     watcher: LaunchpadWatcher = request.app.ctx.watcher
+
+    polling_interval = request.ctx.params.polling_interval
     if polling_interval is not None:
         watcher.set_polling_interval(polling_interval)
-    
+
     if request.app.get_task("watch", raise_exception=False) is not None:
         raise ValueError("watcher polling alreay running")
-    
-    request.app.add_task(watcher_watch, name="watch")
+
+    request.app.add_task(watcher_watch, name="watch") # type: ignore
     data = {"alive": True, "polling_interval": watcher.polling_interval, "automatic_refresh": watcher.automatic_refresh}
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
 
@@ -78,7 +79,7 @@ async def update_polling_interval(request: Request, polling_interval: int):
     watcher.set_polling_interval(polling_interval)
     alive = False
     if request.app.get_task("watch", raise_exception=False) is not None:
-        alive = True 
+        alive = True
     data = {"alive": alive, "polling_interval": watcher.polling_interval, "automatic_refresh": watcher.automatic_refresh}
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
 
@@ -89,7 +90,7 @@ async def toggle_refresh(request: Request):
     watcher.update_automatic_refresh(not watcher.automatic_refresh)
     alive = False
     if request.app.get_task("watch", raise_exception=False) is not None:
-        alive = True 
+        alive = True
     data = {"alive": alive, "polling_interval": watcher.polling_interval, "automatic_refresh": watcher.automatic_refresh}
     return json({"status":200, "reasons": "OK", "data": data}, status=200)
 
@@ -115,13 +116,13 @@ async def refresh_all(request: Request):
     await watcher.update_app(request.app)
     return json({"status":200, "reasons": "OK"}, status=200)
 
-    
+
 @watcherbp.post("/add/<group:str>")
 @protected("super user")
 async def add_group(request: Request, group: str):
     kwargs = request.load_json()
     basepaths = kwargs.get("basepaths", None)
-    
+
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     exist = watcher.groups.get(group, None)
     if exist:
@@ -148,26 +149,25 @@ async def remove_group(request: Request, group: str):
 async def add_to_group(request: Request, group: str):
     kwargs = request.load_json()
     paths = kwargs.get("paths", None)
-    
+
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     exist = watcher.groups.get(group, None)
     if exist is None:
         raise KeyError("group does not exist")
-    
+
     watcher.add_paths(group, paths) #, "data": {"added": added}
     return json({"status":200, "reasons": "OK"}, status=200)
-    
-    
+
+
 @watcherbp.post("/<group:str>/remove")
 @protected("super user")
 async def remove_to_group(request: Request, group: str):
     kwargs = request.load_json()
     paths = kwargs.get("paths", None)
-    
+
     watcher: LaunchpadWatcher = request.app.ctx.watcher
     exist = watcher.groups.get(group, None)
     if exist is None:
         raise KeyError("group does not exist")
     watcher.remove_paths(group, paths) #, "data": {"removed": removed}
-    return json({"status":200, "reasons": "OK"}, status=200)    
-
+    return json({"status":200, "reasons": "OK"}, status=200)

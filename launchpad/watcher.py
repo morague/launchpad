@@ -23,16 +23,17 @@ from importlib.resources import files
 from types import ModuleType
 from typing import Callable, Optional, Any, Type
 
-from launchpad.temporal_server import TemporalServersManager
-from launchpad.parsers import parse_yaml
-from launchpad.utils import (
+from launchpad.temporal.temporal_server import TemporalServersManager
+from launchpad.temporal.utils import (
     is_activity,
     is_workflow,
     is_runner,
-    is_temporal_worker,
-    aggregate,
-    to_path
+    is_temporal_worker
 )
+from launchpad.parsers import parse_yaml
+from launchpad.utils import aggregate, to_path
+
+
 
 Datetime = str
 Payload = dict[str, Any]
@@ -169,7 +170,7 @@ class PyModule(Module):
             rel_path = self._package_rel_path()
         else:
             rel_path = Path(os.path.relpath(self.module))
-        path = [p.name for p in rel_path.parents if p.name != ""]
+        path = [p.name for p in rel_path.parents[::-1] if p.name != ""]
         return ".".join(path + [rel_path.stem])
 
     def reload(self) -> ModuleType:
@@ -355,9 +356,13 @@ class Watcher(object):
         if paths:
             self.add_group("others", paths, [])
 
-    def add_group(self, name: str, basepaths: Sequence[StrOrPath], skips: Sequence[StrOrPath]) -> None:
+    def add_group(self, name: str, basepaths: Sequence[StrOrPath], skips: Sequence[StrOrPath] | None = None) -> None:
+        if skips is None:
+           skips =  []
+
         if self.groups.get(name, None):
-            raise ValueError()
+            raise KeyError("Group name already exist.")
+
         basepaths = to_path(basepaths)
         self.__groups[name] = Group(name, basepaths, skips)
 
@@ -456,11 +461,11 @@ class LaunchpadWatcher(Watcher):
     polling_interval: int = 600
     automatic_refresh: bool = True
     base_modules: dict[str, list[StrOrPath | Traversable]] = {
-        "workflows": [files("launchpad").joinpath("workflows.py")],
-        "workers": [files("launchpad").joinpath("workers.py")],
-        "runners": [files("launchpad").joinpath("runners.py")],
-        "routes": [files("launchpad").joinpath("routes")],
-        "temporal": [files("launchpad").joinpath("temporal_server.py")]
+        "workflows": [files("launchpad").joinpath("temporal", "workflows.py")],
+        "workers": [files("launchpad").joinpath("temporal", "workers.py")],
+        "runners": [files("launchpad").joinpath("temporal", "runners.py")],
+        "temporal": [files("launchpad").joinpath("temporal", "temporal_server.py")],
+        "routes": [files("launchpad").joinpath("routes")]
     }
 
     def __init__(self, *paths: StrOrPath,  **groups: Group) -> None:

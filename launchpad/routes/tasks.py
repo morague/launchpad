@@ -11,7 +11,7 @@ from temporalio.client import (
     ScheduleUpdateInput,
 )
 
-from launchpad.temporal_server import TemporalServersManager
+from launchpad.temporal.temporal_server import TemporalServersManager
 from launchpad.authentication import protected
 
 tasksbp = Blueprint("tasksbp", url_prefix="/tasks")

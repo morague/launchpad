@@ -15,8 +15,7 @@ from typing import Any, Coroutine, Callable
 
 from launchpad.exceptions import NotImplemented
 from launchpad.parsers import parse_yaml
-from launchpad.utils import (
-    parse_timeouts,
+from launchpad.temporal.utils import (
     parse_retry_policy,
     define_cancelation_type,
     define_parent_close_policy,
@@ -24,6 +23,7 @@ from launchpad.utils import (
     define_search_attributes,
     define_id_reuse_policy
 )
+from launchpad.utils import parse_timeouts
 
 logger = logging.getLogger("workflows")
 

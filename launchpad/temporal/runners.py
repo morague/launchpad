@@ -20,7 +20,7 @@ from temporalio.client import (
 
 from typing import Any, Callable, TypedDict, TypeVar, Generic, Optional, Type, Mapping
 
-from launchpad.utils import (
+from launchpad.temporal.utils import (
     parse_retry_policy,
     define_id_reuse_policy
 )

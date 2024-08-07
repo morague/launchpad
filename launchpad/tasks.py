@@ -2,7 +2,7 @@ from sanic import Sanic
 
 from typing import Type
 
-from launchpad.workers import LaunchpadWorker
+from launchpad.temporal.workers import LaunchpadWorker
 from launchpad.watcher import LaunchpadWatcher
 
 

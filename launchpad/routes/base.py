@@ -6,7 +6,7 @@ from sanic import Request
 from sanic.response import empty, redirect
 
 from launchpad.authentication import protected
-from launchpad.temporal_server import TemporalServersManager
+from launchpad.temporal.temporal_server import TemporalServersManager
 
 basebp = Blueprint("basebp", url_prefix="/")
 

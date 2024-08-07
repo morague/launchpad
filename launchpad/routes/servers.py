@@ -4,7 +4,7 @@ from sanic import Request
 from sanic.models.handler_types import Sanic
 from sanic.response import json, empty
 
-from launchpad.temporal_server import (
+from launchpad.temporal.temporal_server import (
     TemporalServersManager,
     TemporalServer,
     NameSpace

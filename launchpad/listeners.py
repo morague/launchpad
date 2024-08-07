@@ -1,7 +1,7 @@
 
 from sanic import Sanic
 
-from launchpad.temporal_server import TemporalServersManager
+from launchpad.temporal.temporal_server import TemporalServersManager
 from launchpad.tasks import watcher_watch
 
 async def start_watcher(app: Sanic):
