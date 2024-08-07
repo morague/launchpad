@@ -29,12 +29,29 @@ async def cookie_token(request: Request) -> None:
     if cookie is not None:
         request.headers.add("Authorization", cookie)
 
+async def parse_args(request: Request) -> None:
+    args = {}
+    for pair in request.get_args(keep_blank_values=True):
+        if len(pair) == 2:
+            key, value = pair
+            args[key] = unquote(value)
+        elif len(pair) == 1:
+            key = pair[0]
+            args[key] = True
+    request.ctx.args = args
+
+async def parse_url(request: Request) -> None:
+    request.ctx.infos = {k:(unquote(v) if isinstance(v, str) else v)for k, v in request.match_info.items()} or {}
+
 async def extract_params(request: Request) -> None:
-    nid = {k:unquote(v) for k,v in request.match_info.items() if k == "nid"} or {}
-    query_args = {k:(v[0] if len(v) == 1 else v) for k,v in request.args.items()}
     payload = request.load_json() or {}
-    params = dict(ChainMap(nid, payload, query_args))
+    params = dict(ChainMap(
+        payload,
+        request.ctx.args
+    ))
     request.ctx.params = ParamsParser(**params)
+
+
 
 async def error_handler(request: Request, exception: Exception):
     perf = round(perf_counter() - request.ctx.t, 5)

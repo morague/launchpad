@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from launchpad.watcher import LaunchpadWatcher
 from launchpad.authentication import Authenticator
-from launchpad.temporal_server import TemporalServersManager
+from launchpad.temporal.temporal_server import TemporalServersManager
 from launchpad.parsers import get_config
 
 from launchpad.routes.tasks import tasksbp, schedulesbp
@@ -28,6 +28,9 @@ from launchpad.middlewares import (
     log_exit,
     cookie_token,
     extract_params,
+    parse_args,
+    parse_url,
+
     error_handler
 )
 
@@ -82,9 +85,12 @@ class Launchpad(object):
         self.app.blueprint(loginbp)
 
         self.app.error_handler.add(Exception, error_handler)
-        self.app.on_request(go_fast, priority=100)
-        self.app.on_request(cookie_token, priority=99)
+        self.app.on_request(go_fast, priority=200)
+        self.app.on_request(cookie_token, priority=199)
+        self.app.on_request(parse_url, priority=100)
+        self.app.on_request(parse_args, priority=99)
         self.app.on_request(extract_params, priority=98)
+
         self.app.on_response(log_exit, priority=100)
 
     async def initialize_components(
