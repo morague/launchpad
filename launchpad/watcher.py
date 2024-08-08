@@ -461,10 +461,10 @@ class LaunchpadWatcher(Watcher):
     polling_interval: int = 600
     automatic_refresh: bool = True
     base_modules: dict[str, list[StrOrPath | Traversable]] = {
-        "workflows": [files("launchpad").joinpath("temporal", "workflows.py")],
-        "workers": [files("launchpad").joinpath("temporal", "workers.py")],
-        "runners": [files("launchpad").joinpath("temporal", "runners.py")],
-        "temporal": [files("launchpad").joinpath("temporal", "temporal_server.py")],
+        "workflows": [files("launchpad").joinpath("temporal", "workflows.py")], # type: ignore
+        "workers": [files("launchpad").joinpath("temporal", "workers.py")], # type: ignore
+        "runners": [files("launchpad").joinpath("temporal", "runners.py")], # type: ignore
+        "temporal": [files("launchpad").joinpath("temporal", "temporal_server.py")], # type: ignore
         "routes": [files("launchpad").joinpath("routes")]
     }
 

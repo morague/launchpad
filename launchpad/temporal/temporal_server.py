@@ -321,12 +321,12 @@ class TemporalServersManager:
         cls,
         servers: list[dict[str, Any]],
         default_server: str | None = None,
-        workers_settings: dict[QueueName, dict[str, Any]] | None = None,
-        tasks_settings: dict[TaskName, dict[str, Any]] | None = None,
-        activities: dict[str, Type] | None = None,
-        workflows: dict[str, Type] | None = None,
-        runners: dict[str, Type] | None = None,
-        workers: dict[str, Type] | None = None,
+        workers_settings: Mapping[QueueName, dict[str, Any]] | None = None,
+        tasks_settings: Mapping[TaskName, dict[str, Any]] | None = None,
+        activities: Mapping[str, Type] | None = None,
+        workflows: Mapping[str, Type] | None = None,
+        runners: Mapping[str, Type] | None = None,
+        workers: Mapping[str, Type] | None = None,
     ) -> TemporalServersManager:
 
         manager = cls()
