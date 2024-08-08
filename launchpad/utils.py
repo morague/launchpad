@@ -5,6 +5,8 @@ from collections import deque
 from jinja2 import Template, StrictUndefined
 from typing import Sequence, Type, Callable, Any
 
+from launchpad.exceptions import LaunchpadKeyError
+
 
 def dyn_update(settings: dict[str, Any], overwrite: dict[str, Any]) -> dict[str, Any]:
     """
@@ -15,7 +17,7 @@ def dyn_update(settings: dict[str, Any], overwrite: dict[str, Any]) -> dict[str,
     def update(settings: dict[str, Any], layers: deque[str], value: Any) -> dict[str, Any]:
         layer = layers.popleft()
         if settings.get(layer, None) is None:
-            raise KeyError(f"overwrite key {layer} not found")
+            raise LaunchpadKeyError(f"overwrite key {layer} not found")
         if len(layers) > 0:
             settings[layer] = update(settings[layer], layers, value)
         else:

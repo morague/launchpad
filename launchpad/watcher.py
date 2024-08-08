@@ -32,7 +32,7 @@ from launchpad.temporal.utils import (
 )
 from launchpad.parsers import parse_yaml
 from launchpad.utils import aggregate, to_path
-
+from launchpad.exceptions import (LaunchpadKeyError, LaunchpadValueError, LaunchpadTypeError)
 
 
 Datetime = str
@@ -140,7 +140,7 @@ class Module:
     def _parse_path(self, path: StrOrPath) -> Path:
         path = Path(path)
         if path.exists() is False:
-            raise ValueError("path doesn't exist")
+            raise FileExistsError(f"File {str(path)} not found.")
         return path
 
     def _package_rel_path(self) -> Path:
@@ -179,7 +179,7 @@ class PyModule(Module):
             self.module.absolute()
         )
         if spec is None:
-            raise ValueError("specs from file not found.")
+            raise FileExistsError(f"cannot reaload: {self.module_name}. Specs not found")
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[self.module_name] = module
@@ -361,7 +361,7 @@ class Watcher(object):
            skips =  []
 
         if self.groups.get(name, None):
-            raise KeyError("Group name already exist.")
+            raise LaunchpadKeyError(f"Cannot add group {name}. Group already exist.")
 
         basepaths = to_path(basepaths)
         self.__groups[name] = Group(name, basepaths, skips)
@@ -372,19 +372,19 @@ class Watcher(object):
     def add_paths(self, group_name: str, paths: list[StrOrPath]) -> None:
         group = self.groups.get(group_name, None)
         if group is None:
-            raise ValueError("group does not exist")
+            raise LaunchpadKeyError(f"Cannot add paths to group {group_name}. Group does not exist.")
         group.add_paths(*paths)
 
     def remove_paths(self, group_name: str, paths: list[StrOrPath]) -> None:
         group = self.groups.get(group_name, None)
         if group is None:
-            raise ValueError("group does not exist")
+            raise LaunchpadKeyError(f"Cannot remove paths from group {group_name}. Group does not exist.")
         group.remove_paths(*paths)
 
     def get(self, group: str) -> Group:
         grp = self.groups.get(group, None)
         if grp is None:
-            raise KeyError("group does not exist")
+            raise LaunchpadKeyError(f"Cannot get group {group}. Group does not exist.")
         return grp
 
     def get_module(self, path: StrOrPath, default: Any= None) -> PyModule | YamlModule:
@@ -428,25 +428,25 @@ class Watcher(object):
     def reload_module(self, module_path: StrOrPath) -> None:
         module = self.get_module(module_path)
         if isinstance(module, YamlModule):
-            raise ValueError("YamlModule has no method temporal_objects")
+            raise LaunchpadTypeError("YamlModules don't have temporal objects")
         module.reload()
 
     def temporal_objects_from_module(self, module_path: StrOrPath) -> Mapping[str, Type]:
         module = self.get_module(module_path)
         if isinstance(module, YamlModule):
-            raise ValueError("YamlModule has no method temporal_objects")
+            raise LaunchpadTypeError("YamlModules don't have temporal objects")
         return module.temporal_objects()
 
     def payload_from_module(self, module_path: StrOrPath) -> Mapping[str, Mapping]:
         module = self.get_module(module_path)
         if isinstance(module, PyModule):
-            raise ValueError("Pymodule has no method payload")
+            raise LaunchpadTypeError("Pymodule cannot be extracted as payload")
         return module.payload()
 
     def inject_module(self, objects: Mapping[str, Type], module_path: StrOrPath) -> None:
         module = self.get_module(module_path)
         if not isinstance(module, PyModule):
-            raise TypeError()
+            raise LaunchpadTypeError("YamlModules cannot receives temporal objects")
         module.inject(objects)
 
     def _select_groups(self, group_names: Sequence[str]) -> Sequence[Group]:

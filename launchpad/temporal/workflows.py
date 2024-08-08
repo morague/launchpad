@@ -13,7 +13,7 @@ from temporalio.common import RetryPolicy
 
 from typing import Any, Coroutine, Callable
 
-from launchpad.exceptions import NotImplemented
+from launchpad.exceptions import (LaunchpadValueError, MissingImportError, NotImplemented, LaunchpadKeyError, SettingsError)
 from launchpad.parsers import parse_yaml
 from launchpad.temporal.utils import (
     parse_retry_policy,
@@ -36,11 +36,11 @@ class BaseWorkflow(ABC):
     def parse_activity(self, kwargs: dict[str, Any]) -> tuple[Callable, list[Any], dict[str, Any]]:
         activity_name = kwargs.get("activity", None)
         if activity_name is None:
-            raise KeyError("define an activity")
+            raise LaunchpadKeyError("Tasks Settings missing `activity` field")
 
         activity = getattr(sys.modules[__name__], activity_name, None)
         if activity is None:
-            raise ValueError("you must refresh your modules")
+            raise MissingImportError(f"Cannot get temporal activity. `{activity_name}` is not imported")
 
         arguments = kwargs.get("args", [])
         key_arguments = {
@@ -59,21 +59,21 @@ class BaseWorkflow(ABC):
         global_parameters: dict[str, Any]
         ) -> tuple[Callable, dict[str, Any], dict[str, Any]]:
         if not isinstance(settings, dict) and os.path.exists(settings) is False:
-            raise ValueError()
+            raise LaunchpadValueError(f"Child tasks must be either a Settings Path or a Settings Payload")
         elif not isinstance(settings, dict):
             settings = parse_yaml(settings)
         workflow_payload: dict = settings.get("workflow", None)
 
         if workflow_payload is None:
-            KeyError()
+            raise SettingsError("Task settings missing `workflow` field.")
 
         workflow_name = workflow_payload.get("workflow", None)
         if workflow_name is None:
-            raise KeyError()
+            raise LaunchpadKeyError(f"Task settings missing `workflow.workflow` field.")
 
         workflow_class = getattr(sys.modules[__name__], workflow_name, None)
         if workflow_class is None:
-            raise KeyError()
+            raise MissingImportError(f"cannot get temporal workflow. `{workflow_name}` is not imported")
 
         workflow_kwargs = workflow_payload.get("workflow_kwargs", None)
         key_arguments = {
@@ -100,8 +100,11 @@ class BaseWorkflow(ABC):
             workflow_class = getattr(sys.modules[__name__], workflow_name, None)
             workflow_id = handled_workflow.get("workflow_id", None)
 
-            if workflow_class is None or workflow_id is None:
-                raise KeyError()
+            if workflow_class is None:
+                raise MissingImportError(f"cannot get temporal workflow. `{workflow_name}` is not imported")
+
+            if workflow_id is None:
+                raise SettingsError("Task settings missing `workflow`_id field.")
 
             handled_signal = chain_event.get("signal", {})
             signal_name = handled_signal.get("signal")
@@ -211,7 +214,7 @@ class BatchTask(BaseWorkflow):
     async def run(self, kwargs: dict[str, Any]) -> None:
         batch = kwargs.get("batch", None)
         if batch is None:
-            raise KeyError()
+            raise SettingsError("Task settings missing `batch` field.")
 
         await self.handle_at_start(kwargs)
         for activity_payload in batch:
@@ -244,7 +247,7 @@ class AwaitedBatchTask(BaseWorkflow):
 
         batch = kwargs.get("batch", None)
         if batch is None:
-            raise KeyError()
+            raise SettingsError("Task settings missing `batch` field.")
 
         await self.handle_at_start(kwargs)
         for activity_payload in batch:

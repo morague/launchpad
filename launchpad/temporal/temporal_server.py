@@ -28,7 +28,7 @@ from typing import Any, Type, Coroutine
 from launchpad.temporal.runners import Runner
 from launchpad.temporal.workers import LaunchpadWorker
 from launchpad.utils import dyn_update, dyn_templating
-
+from launchpad.exceptions import (LaunchpadKeyError, LaunchpadValueError, SettingsError, MissingImportError)
 
 ServerAddress = str
 QueueName = str
@@ -111,17 +111,17 @@ class NameSpace:
         worker_type = settings.pop("type", None)
 
         if worker_type is None:
-            raise ValueError("worker not existing")
+            raise SettingsError(f"Your worker settings file is missing `type` field.")
 
         workerclass: LaunchpadWorker | None = getattr(module, worker_type, None)
         if workerclass is None:
-            raise KeyError("worker class not imported")
+            raise MissingImportError(f"worker of type {worker_type} not imported.")
 
         activities = [getattr(module, k, None) for k in settings["activities"]]
         workflows = [getattr(module, k, None) for k in settings["workflows"]]
 
         if not all(activities + workflows):
-            raise ValueError("activities or workflows not imported in workers module")
+            raise MissingImportError("Missing worker Activity or Workflow import.")
 
         settings["activities"] = activities
         settings["workflows"] = workflows
@@ -193,7 +193,7 @@ class TemporalServer:
         if default_namespace is not None:
             default = server.namespaces.get(default_namespace, None)
             if default is None:
-                raise KeyError("namespace does not exist")
+                raise LaunchpadKeyError(f"{default_namespace} namespace not found in server {name}")
             server.default_namespace = default
         if proxy is not None:
             server.proxy = HttpConnectProxyConfig(**proxy)
@@ -234,7 +234,7 @@ class TemporalServer:
                 raise SystemError("Namespace cannot be created")
 
         if self.namespaces.get(name, None) is not None:
-            raise KeyError("Namespace already exist")
+            raise LaunchpadKeyError(f"{name} namespace already exist in server {self.name}")
 
         namespace = NameSpace(name, retention)
         self.namespaces.update({name: namespace})
@@ -245,7 +245,7 @@ class TemporalServer:
     async def remove_namespace(self, name: str, app: Sanic) -> None:
         namespace = self.namespaces.get(name, None)
         if namespace is None:
-            raise KeyError("Namespace does not exist")
+            raise LaunchpadKeyError(f"{name} namespace not found in server {self.name}")
         self.namespaces.pop(name)
         await namespace.close(app)
 
@@ -335,14 +335,14 @@ class TemporalServersManager:
         if default_server is not None:
             default = manager.servers.get(default_server, None)
             if default is None:
-                raise KeyError("server does not exist")
+                raise LaunchpadKeyError(f"{default_server} not found. cannot be set as default server")
             manager.default_server = default
         elif len(servers) == 1:
             key = list(manager.servers.keys())[0]
             default = manager.servers.get(key)
             manager.default_server = default # type: ignore
         else:
-            raise KeyError("define a default server.")
+            raise SettingsError(f"You must set a default server.")
 
         manager.refresh_settings(
             tasks_settings=tasks_settings,
@@ -362,7 +362,7 @@ class TemporalServersManager:
     async def add_server(self, settings: dict[str, Any]) -> None:
         server = await TemporalServer.initialize(**settings)
         if self.servers.get(server.name, None) is not None:
-            raise KeyError("server already exist")
+            raise LaunchpadKeyError(f" cannot set server :{server.name}. server name already exist")
 
         self.__servers.update({server.name: server})
         if getattr(self, "default_server", None):
@@ -376,9 +376,9 @@ class TemporalServersManager:
         """
         server = self.__servers.get(server_name, None)
         if server is None:
-            raise KeyError("server does not exist")
+            raise LaunchpadKeyError(f"cannot remove server: {server_name}. {server_name} key does not exist.")
         if self.default_server == server:
-            raise ValueError("Server is your default server. Cannot remove it.")
+            raise LaunchpadValueError(f"cannot remove server: {server_name}. {server_name} is set as default server.")
         self.__servers.pop(server_name, None)
         await server.close(app)
 
@@ -406,7 +406,7 @@ class TemporalServersManager:
     ) -> dict[str, Any]:
         settings = copy.deepcopy(self.settings.tasks.get(task_name, None))
         if settings is None:
-            raise KeyError(f"Task {task_name} not found.")
+            raise SettingsError(f"Cannot load tasks settings: {task_name}. Tasks settings not found under name {task_name}.")
         settings = self._dyn_update_settings(settings, overwrite, template_args)
         return settings
 
@@ -418,14 +418,14 @@ class TemporalServersManager:
     ) -> dict[str, Any]:
         settings = copy.deepcopy(self.settings.workers.get(worker_name, None))
         if settings is None:
-            raise KeyError("Worker queue does not exist")
+            raise SettingsError(f"Cannot load worker settings: {worker_name}. worker settings not found under name {worker_name}.")
         settings = self._dyn_update_settings(settings, overwrite, template_args)
         return settings
 
     def get_server(self, server_name: str) -> TemporalServer:
         server = self.servers.get(server_name, None)
         if server is None:
-            raise KeyError("Server does not exist")
+            raise LaunchpadKeyError(f"cannot get server: {server_name}. Server {server_name} name does not exist")
         return server
 
     async def get_temporal_frame(self, namespace_name: str | None = None, server_name: str | None = None) -> tuple[TemporalServer, NameSpace, Client]:
@@ -436,7 +436,7 @@ class TemporalServersManager:
             server: TemporalServer = self.get_server(server_name)
 
         if server is None:
-            raise KeyError("Unknow, server.")
+            raise LaunchpadKeyError(f"cannot get server: {server_name}. Server {server_name} name does not exist")
 
         if namespace_name is None:
             namespace = server.default_namespace
@@ -444,7 +444,7 @@ class TemporalServersManager:
             namespace = server.namespaces.get(namespace_name)
 
         if namespace is None:
-            raise KeyError("Unknown namespace")
+            raise LaunchpadKeyError(f"cannot get namespace: {namespace_name} from server {server_name}. namespace {namespace_name} does not exist")
 
         client = await server.get_client(namespace=namespace.name)
         return (server, namespace, client)
@@ -475,8 +475,10 @@ class TemporalServersManager:
         runner_name = settings.get("runner", None)
         runner_class = self.temporal_objects.runners.get(runner_name, None)
 
-        if runner_name is None or runner_class is None:
-            raise KeyError("Unknown runner type.")
+        if runner_name is None:
+            raise SettingsError("Cannot get Temporal runner. Tasks settings must set a `runner` field.")
+        if runner_class is None:
+            raise MissingImportError(f"Cannot get Temporal runner. `{runner_name}` is not imported.")
         return runner_class
 
     async def deploy_task(
@@ -521,7 +523,7 @@ class TemporalServersManager:
         if len(workers) == 1:
             server, namespace, worker = workers[0]
         else:
-            raise ValueError()
+            raise LaunchpadKeyError(f"Cannot select a worker to restart. Multiple workers found. Define a server name and a namespace name to refine your search.")
 
         deployment = self.settings.workers.get(worker.task_queue)
         deployment = self._dyn_update_settings(deployment, overwrite, template_args)
@@ -541,7 +543,7 @@ class TemporalServersManager:
         if len(workers) == 1:
             server, namespace, worker = workers[0]
         else:
-            raise ValueError()
+            raise LaunchpadKeyError(f"Cannot select a worker to stop. Multiple workers found. Define a server name and a namespace name to refine your search.")
         await namespace.stop_workers(task_queue, app)
 
     async def on_server_start_deploy_tasks(self, app: Sanic) -> None:
@@ -586,13 +588,16 @@ class TemporalServersManager:
     def _get_runner_frame(self, settings: dict[str, Any] , client: Client) -> dict[str, Any]:
         payload = settings.get("workflow", None)
         if payload is None:
-            raise KeyError("runner settings not found.")
+            raise SettingsError("Task settings missing `workflow` field.")
 
         workflow_name = payload.get("workflow", None)
         workflow_class = self.temporal_objects.workflows.get(workflow_name, None)
 
-        if workflow_name is None or workflow_class is None:
-            raise KeyError("Unknown Workflow Type.")
+        if workflow_name is None:
+            raise LaunchpadKeyError(f"Task settings missing `workflow.workflow` field.")
+
+        if workflow_class is None:
+            raise MissingImportError(f"cannot get temporal workflow. `{workflow_name}` is not imported")
 
         payload.update({"client": client, "workflow": workflow_class})
         return payload

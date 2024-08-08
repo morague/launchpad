@@ -24,6 +24,9 @@ from launchpad.temporal.utils import (
     parse_retry_policy,
     define_id_reuse_policy
 )
+from launchpad.exceptions import (LaunchpadKeyError, MissingImportError, SettingsError)
+from launchpad.temporal.workers import LaunchpadWorker
+
 
 F = TypeVar('F', bound=Callable[..., Any])
 
@@ -168,7 +171,7 @@ class WorkflowRunnerWithTempWorker(Runner):
 
         activity = getattr(sys.modules[__name__], workflow_kwargs.get("activity", None))
         if activity is None:
-            raise ValueError()
+            raise MissingImportError(f"Cannot get temporal activity. `{workflow_kwargs.get('activity', None)}` is not imported")
 
         async with Worker(client, task_queue=task_queue, workflows=[workflow], activities=[activity]):
             await client.execute_workflow( # type: ignore
@@ -198,7 +201,7 @@ class ScheduledWorkflowRunner(Runner):
             return ScheduleOverlapPolicy.SKIP
         overlap_attr = getattr(ScheduleOverlapPolicy, overlap, None)
         if overlap_attr is None:
-            raise KeyError()
+            raise SettingsError(f"Cannot get temporal Overlap Policy.`{overlap}` is not a known overlap policy.")
         return overlap_attr
 
 
