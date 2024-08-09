@@ -1,15 +1,16 @@
 name: batch0
 runner: WorkflowRunner
-client_address: localhost:7233
+server: home
+namespace: dev
 workflow:
   workflow: BatchTask
   workflow_id: batch0_workflow_id
   task_queue: default
   workflow_kwargs:
     batch:
-      - activity: hello
-        args: 
-          - BATHCH0_0_WORLD
+      - activity: appfile
+        args:
+          - BATHCH0_0
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -22,9 +23,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: hello
-        args: 
-          - BATHCH0_1_WORLD
+      - activity: appfile
+        args:
+          - BATHCH0_1
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -37,9 +38,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: hello
-        args: 
-          - BATHCH0_2_WORLD
+      - activity: appfile
+        args:
+          - BATHCH0_2
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -51,10 +52,10 @@ workflow:
           non_retryable_error_types:
             - ValueError
             - KeyError
-  
+
   retry_policy:
-    backoff_coefficient: 2.0 
-    initial_interval: 
+    backoff_coefficient: 2.0
+    initial_interval:
       seconds: 5
 
     maximum_attempts: 5
@@ -64,5 +65,5 @@ workflow:
     non_retryable_error_types:
       - ValueError
       - KeyError
-  memo: 
+  memo:
     test: "this is a test"

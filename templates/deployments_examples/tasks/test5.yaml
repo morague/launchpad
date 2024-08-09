@@ -1,15 +1,16 @@
 # -- WORKFLOW RUNNER WITH TEMPWORKER TEST + TASK WORKFLOW
 name: test5
 runner: ScheduledWorkflowRunner
-client_address: localhost:7233
+server: home
+namespace: dev
 workflow:
   workflow: Task
   workflow_id: test5_scheduled_workflow_id
   task_queue: default
   workflow_kwargs:
-    activity: hello
-    args: 
-      - SCHEDULED_WORLD
+    activity: appfile
+    args:
+      - SCHEDULED_ROMAIN
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON
@@ -28,8 +29,8 @@ workflow:
         seconds: 10
 
   retry_policy:
-    backoff_coefficient: 2.0 
-    initial_interval: 
+    backoff_coefficient: 2.0
+    initial_interval:
       seconds: 5
     maximum_attempts: 5
     maximum_interval:
@@ -37,5 +38,5 @@ workflow:
     non_retryable_error_types:
       - ValueError
       - KeyError
-  memo: 
+  memo:
     test: "this is a test"

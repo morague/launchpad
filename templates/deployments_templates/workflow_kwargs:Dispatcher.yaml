@@ -1,3 +1,7 @@
-cancellation_type: # Optional[str]. default WAIT_CANCELLATION_COMPLETED. values ActivityCancellationType ABANDON | TRY_CANCEL ABANDON | TRY_CANCEL | WAIT_CANCELLATION_COMPLETED
-parent_close_policy: # Optional[str] . default TERMINATE. values ParentClosePolicy ABANDON | REQUEST_CANCEL | TERMINATE | UNSPECIFIED
-versioning_intent: # Optional[str]. default None. values VersioningIntent: COMPATIBLE | DEFAULT
+workflow: TaskDispatcher
+workflow_id: dispatcher_id # str
+task_queue: default # str task_queue name
+workflow_kwargs:
+  cancellation_type: # Optional[str]. default WAIT_CANCELLATION_COMPLETED. values ActivityCancellationType ABANDON | TRY_CANCEL ABANDON | TRY_CANCEL | WAIT_CANCELLATION_COMPLETED
+  parent_close_policy: # Optional[str] . default TERMINATE. values ParentClosePolicy ABANDON | REQUEST_CANCEL | TERMINATE | UNSPECIFIED
+  versioning_intent: # Optional[str]. default None. values VersioningIntent: COMPATIBLE | DEFAULT

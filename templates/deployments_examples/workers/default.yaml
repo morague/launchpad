@@ -1,7 +1,8 @@
 deploy_on_server_start: true
-worker:  
+client: home
+namespace: dev
+worker:
   type: AsyncWorker
-  client_address: "localhost:7233"
   task_queue: default
   workflows:
     - Task

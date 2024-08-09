@@ -2,13 +2,22 @@ app:
   env: development
   sanic:
     app:
-      temporal_client_address: "localhost:7233"
-      temporal_gui_address: "localhost:8233"
-      secret: "xxxxxxx"
+      secret: xxxxxxx
 
   temporalio:
-    external_server: True
-    deploy_tasks_on_server_start: True
+    default_server: home
+    servers:
+      - name: home
+        ip: localhost
+        port: 7233
+        gui_port: 8233
+        namespaces:
+          # default namespace exist by default
+          - name: dev
+            retention: 2629743 #1month
+          - name: prod
+            retention: 2629743 # 1month
+        default_namespace: dev
 
   watcher:
     modules:
@@ -31,7 +40,7 @@ app:
       on_server_start: True
       automatic_refresh: True
       polling_interval: 600
-      
+
   authenticator:
     db: ":memory:"
     base_users:
@@ -46,7 +55,7 @@ app:
     version: 1
     disable_existing_loggers: False
     formatters:
-      simple: 
+      simple:
         class: logging.Formatter
         format: "[%(asctime)s][%(name)s][%(process)d][%(levelname)s] | %(message)s"
         datefmt: "%d-%m-%Y %H:%M:%S"

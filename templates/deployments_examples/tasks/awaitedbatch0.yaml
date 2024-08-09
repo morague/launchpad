@@ -1,6 +1,7 @@
 name: awaitedbatch0
 runner: WorkflowRunner
-client_address: localhost:7233
+server: home
+namespace: dev
 deploy_on_server_start: True
 workflow:
   workflow: AwaitedBatchTask
@@ -10,9 +11,9 @@ workflow:
     at_end:
       renew: True
     batch:
-      - activity: hello
-        args: 
-          - AWAITEDBATHCH0_0_WORLD
+      - activity: appfile
+        args:
+          - AWAITEDBATHCH0_0
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -25,9 +26,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: hello
-        args: 
-          - AWAITEDBATHCH0_1_WORLD
+      - activity: appfile
+        args:
+          - AWAITEDBATHCH0_1
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -40,9 +41,9 @@ workflow:
             - ValueError
             - KeyError
 
-      - activity: hello
-        args: 
-          - AWAITEDBATHCH0_2_WORLD
+      - activity: appfile
+        args:
+          - AWAITEDBATHCH0_2
         start_to_close_timeout:
           seconds: 5
         cancellation_type: ABANDON
@@ -54,10 +55,10 @@ workflow:
           non_retryable_error_types:
             - ValueError
             - KeyError
-  
+
   retry_policy:
-    backoff_coefficient: 2.0 
-    initial_interval: 
+    backoff_coefficient: 2.0
+    initial_interval:
       seconds: 5
 
     maximum_attempts: 5
@@ -67,5 +68,5 @@ workflow:
     non_retryable_error_types:
       - ValueError
       - KeyError
-  memo: 
+  memo:
     test: "this is a test"

@@ -1,12 +1,17 @@
-type: AsyncWorker
-client_address: "localhost:7233"
-task_queue: default
-workflows:
-  - Task
-  - TaskDispatcher
-  - AwaitedTask
-  - BatchTask
-  - AwaitedBatchTask
-activities:
-  - hello
-max_workers: 100
+deploy_on_server_start: true
+client: home
+namespace: dev
+overwritable: False
+template: False
+worker:
+  type: AsyncWorker
+  task_queue: default
+  workflows:
+    - Task
+    - TaskDispatcher
+    - AwaitedTask
+    - BatchTask
+    - AwaitedBatchTask
+  activities:
+    - appfile
+  max_workers: 100

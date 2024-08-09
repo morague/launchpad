@@ -1,10 +1,14 @@
 name: # str
-runner:  # Type[Runner] Runners: ScheduledWorkflowRunner
-client_address: # str = "localhost:7233"
+runner: # Type[Runner] Runners: ScheduledWorkflowRunner
+server: # Optional[str]. default: use default server
+namespace: # Optional[str]. default: use default namespace
+template: # Optional[bool]. default : False  . Templates use jinja2 templating patterns
+overwritable: # Optional[bool]. default : False
+deploy_on_server_start: # Optional[bool]. default : False
 workflow:
-  task_queue:  # str,  Worker queue Name
-  workflow_id:  # str
-  workflow:  # Type[Workflow] Workflow: Task
+  task_queue: # str,  Worker queue Name
+  workflow_id: # str
+  workflow: # Type[Workflow] Workflow: Task
   workflow_kwargs: # TEMPLATES
 
   memo: # Optional[dict[str, Any]]
@@ -84,7 +88,7 @@ workflow:
     month: #list[int]
     year: #list[int]
     day_of_week: #list[int]
-    comment: # Optional[str] 
+    comment: # Optional[str]
 
   skip: # Optional[list]
     second: #list[int]
@@ -94,7 +98,7 @@ workflow:
     month: #list[int]
     year: #list[int]
     day_of_week: #list[int]
-    comment: # Optional[str] 
+    comment: # Optional[str]
 
   crons: # Optional[list[str]] e.g: "* * * * *"
 

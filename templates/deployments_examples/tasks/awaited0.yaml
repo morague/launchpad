@@ -1,15 +1,16 @@
 name: awaited0
 runner: WorkflowRunner
-client_address: localhost:7233
+server: home
+namespace: dev
 deploy_on_server_start: True
 workflow:
   workflow: AwaitedTask
   workflow_id: awaited_task_id
   task_queue: default
-  workflow_kwargs: 
-    activity: hello
-    args: 
-      - AWAITED_WORLD
+  workflow_kwargs:
+    activity: appfile
+    args:
+      - AWAITED_ROMAIN
     at_end:
       renew: True
 

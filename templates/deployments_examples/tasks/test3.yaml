@@ -1,15 +1,18 @@
 # -- WORKFLOW RUNNER TEST + TASK WORKFLOW
 name: test3
 runner: WorkflowRunner
-client_address: localhost:7233
+server: home
+namespace: dev
+overwritable: true
+template: false
 workflow:
   workflow: Task
   workflow_id: test3_workflow_id
   task_queue: default
   workflow_kwargs:
-    activity: hello
-    args: 
-      - TEST3_WORLD
+    activity: appfile
+    args:
+      - TEST3_ROMAIN
     start_to_close_timeout:
       seconds: 5
     cancellation_type: ABANDON
@@ -21,10 +24,10 @@ workflow:
       non_retryable_error_types:
         - ValueError
         - KeyError
-  
+
   retry_policy:
-    backoff_coefficient: 2.0 
-    initial_interval: 
+    backoff_coefficient: 2.0
+    initial_interval:
       seconds: 5
 
     maximum_attempts: 5
@@ -34,5 +37,5 @@ workflow:
     non_retryable_error_types:
       - ValueError
       - KeyError
-  memo: 
+  memo:
     test: "this is a test"

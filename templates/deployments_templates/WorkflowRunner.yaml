@@ -1,6 +1,10 @@
 name: #str : deployment name
 runner: WorkflowRunner # str. Runner class name
-client_address: localhost:7233 #str . default localhost:7233 is temporal client default port
+server: # Optional[str]. default: use default server
+namespace: # Optional[str]. default: use default namespace
+template: # Optional[bool]. default : False  . Templates use jinja2 templating patterns
+overwritable: # Optional[bool]. default : False
+deploy_on_server_start: # Optional[bool]. default : False
 workflow:
   task_queue: #str . Worker queue to be used by the runner.
   workflow_id: #str . Your workflow ID.
@@ -33,7 +37,6 @@ workflow:
       days: #Optional[int]
       weeks: #Optional[int]
     non_retryable_error_types: #Optional[list[str]] error_names as str
-
 
   execution_timeout: # Optional[timedelta]
     milliseconds: #Optional[int]

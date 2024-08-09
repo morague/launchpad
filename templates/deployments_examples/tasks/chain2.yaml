@@ -1,14 +1,15 @@
 name: chain2
 runner: WorkflowRunner
-client_address: localhost:7233
+server: home
+namespace: dev
 workflow:
   workflow: Task
   workflow_id: chained_task_2
   task_queue: default
   workflow_kwargs:
-    activity: hello
-    args: 
-      - CHAINED_WORLD_2
+    activity: appfile
+    args:
+      - CHAINED_ROMAIN_2
 
     at_end:
       chain_with:
@@ -17,7 +18,7 @@ workflow:
             workflow_id: awaitedbatch0_workflow_id
           signal:
             signal: start
-            signal_args: 
+            signal_args:
 
     start_to_close_timeout:
       seconds: 5
@@ -30,10 +31,10 @@ workflow:
       non_retryable_error_types:
         - ValueError
         - KeyError
-  
+
   retry_policy:
-    backoff_coefficient: 2.0 
-    initial_interval: 
+    backoff_coefficient: 2.0
+    initial_interval:
       seconds: 5
 
     maximum_attempts: 5
@@ -43,5 +44,5 @@ workflow:
     non_retryable_error_types:
       - ValueError
       - KeyError
-  memo: 
+  memo:
     test: "this is a test"
