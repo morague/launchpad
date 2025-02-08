@@ -146,6 +146,7 @@ class TemporalServer:
     proxy: HttpConnectProxyConfig | None = field(default=None)
     api_key: str | None = field(default=None)
     runtime: Runtime =  RUNTIME
+
     @property
     def address(self):
         return f"{self.ip}:{str(self.port)}"
@@ -308,7 +309,7 @@ class TemporalServersManager:
 
     def __init__(self) -> None:
         self.__servers = {}
-        self.settings = SimpleNamespace(tasks = {},workers = {})
+        self.settings = SimpleNamespace(tasks = {}, workers = {})
         self.temporal_objects = SimpleNamespace(
             activities={},
             workflows={},

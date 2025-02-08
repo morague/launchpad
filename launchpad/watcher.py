@@ -487,7 +487,7 @@ class LaunchpadWatcher(Watcher):
         return {v["worker"]["task_queue"]:v for v in self.get("workers").payloads().values()}
 
     def tasks_settings(self) -> Mapping[str, Mapping[str, Any]]:
-        return {v["name"]:v for v in self.get("deployments").payloads().values()}
+        return {v["name"]:v for v in self.get("tasks").payloads().values()}
 
     def activities(self) -> Mapping[str, Type]:
         return {k:v for k,v in self.get("activities").temporal_objects().items() if is_activity(v)}

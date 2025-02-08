@@ -27,7 +27,7 @@ app:
       workflows:
         basepaths:
           - ./{{ name }}/temporal/workflows.py
-      deployments:
+      tasks:
         basepaths:
           - ./deployments/tasks
       activities:
